@@ -2,6 +2,7 @@
 ApiTrack Pro v2.1 — Plateforme Apicole Professionnelle
 Auteur : RAHIM S. | Région de l'Oranie, Algérie
 Morphométrie selon Ruttner (1988) · Données Chahbar et al. (2013)
+Ajout : Analyse satellite (NDVI) et deep learning (segmentation)
 """
 
 import streamlit as st
@@ -12,6 +13,12 @@ import hashlib
 import os
 from datetime import datetime, timedelta
 import json
+import matplotlib.pyplot as plt
+import numpy as np
+import folium
+from streamlit_folium import st_folium
+import tensorflow as tf
+from sentinelhub import BBox, CRS, SentinelHubRequest, DataCollection, MimeType
 
 # ─────────────────────────────────────────────
 # CONFIGURATION GÉNÉRALE
@@ -49,6 +56,13 @@ PROFIL_COLORS = {
     "Gelée Royale": "#9B59B6",
     "Résistance": "#22C55E",
 }
+
+# ─────────────────────────────────────────────
+# CONFIGURATION SENTINEL HUB (à remplacer par vos identifiants)
+# ─────────────────────────────────────────────
+SH_INSTANCE_ID = "votre_instance_id"   # à obtenir sur apps.sentinel-hub.com
+SH_CLIENT_ID = "votre_client_id"
+SH_CLIENT_SECRET = "votre_client_secret"
 
 # ─────────────────────────────────────────────
 # CSS GLOBAL
@@ -651,6 +665,68 @@ def classify_bee(L, Ri, Ac, pv, tom, ti):
     return best, probs
 
 # ─────────────────────────────────────────────
+# ANALYSE SATELLITE & IA (NDVI, deep learning)
+# ─────────────────────────────────────────────
+def get_sentinel_image(bbox, date_start, date_end, resolution=10):
+    """Télécharge une image Sentinel-2 L2A sous forme de tableau numpy."""
+    try:
+        evalscript = """
+        //VERSION=3
+        function setup() {
+            return {
+                input: ["B02", "B03", "B04", "B08"],
+                output: { bands: 4, sampleType: "FLOAT32" }
+            };
+        }
+        function evaluatePixel(sample) {
+            return [sample.B04, sample.B03, sample.B02, sample.B08];
+        }
+        """
+        bbox = BBox(bbox, crs=CRS.WGS84)
+        request = SentinelHubRequest(
+            evalscript=evalscript,
+            input_data=[SentinelHubRequest.input_data(
+                data_collection=DataCollection.SENTINEL2_L2A,
+                time_interval=(date_start, date_end),
+                maxcc=0.3
+            )],
+            responses=[SentinelHubRequest.output_response('default', MimeType.TIFF)],
+            bbox=bbox,
+            size=(512, 512),
+            config=SentinelHubRequest.config(instance_id=SH_INSTANCE_ID,
+                                              client_id=SH_CLIENT_ID,
+                                              client_secret=SH_CLIENT_SECRET)
+        )
+        data = request.get_data()[0]
+        return data
+    except Exception as e:
+        st.error(f"Erreur téléchargement Sentinel: {e}")
+        return None
+
+def compute_ndvi(image):
+    """Calcule NDVI à partir de l'image (Rouge, NIR)."""
+    red = image[:, :, 0].astype(float)
+    nir = image[:, :, 3].astype(float)
+    ndvi = (nir - red) / (nir + red + 1e-10)
+    return ndvi
+
+def load_segmentation_model(model_path="melliferous_model.h5"):
+    """Charge un modèle de segmentation pré-entraîné (U-Net)."""
+    try:
+        model = tf.keras.models.load_model(model_path)
+        return model
+    except Exception as e:
+        st.warning(f"Modèle non trouvé ou erreur: {e}")
+        return None
+
+def predict_zones(model, image):
+    """Prédit les zones mellifères à partir d'une image satellite."""
+    img = tf.image.resize(image, (256,256)) / 255.0
+    pred = model.predict(np.expand_dims(img, axis=0))[0]
+    mask = (pred > 0.5).astype(np.uint8)
+    return mask
+
+# ─────────────────────────────────────────────
 # INITIALISATION
 # ─────────────────────────────────────────────
 init_db()
@@ -731,6 +807,7 @@ with st.sidebar:
         "🧬 Génétique & Races":   "genetique",
         "📈 Caractérisation":     "caracterisation",
         "🗺️ Cartographie":        "carte",
+        "🤖 Analyse IA":          "ia_analysis",      # NOUVEAU
         "🌸 Flore Mellifère":     "flore",
         "🌤️ Météo & Miellée":    "meteo",
         "📋 Rapports":            "rapports",
@@ -786,7 +863,7 @@ with st.sidebar:
         st.rerun()
 
 # ─────────────────────────────────────────────
-# PAGE: DASHBOARD
+# PAGE: DASHBOARD (inchangée)
 # ─────────────────────────────────────────────
 if current_page == "dashboard":
     df = st.session_state.data["ruches"]
@@ -918,7 +995,7 @@ if current_page == "dashboard":
             st.markdown(ruche_card_html(r), unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
-# PAGE: RUCHES
+# PAGE: RUCHES (inchangée)
 # ─────────────────────────────────────────────
 elif current_page == "ruches":
     st.markdown('<div class="page-title">🏠 Gestion des Ruches</div>', unsafe_allow_html=True)
@@ -1026,7 +1103,7 @@ elif current_page == "ruches":
         st.plotly_chart(fig_score, use_container_width=True, config={"displayModeBar":False})
 
     with tab4:
-        # NOUVEAU : onglet modification de ruche
+        # Modification ruche
         df = st.session_state.data["ruches"]
         section_header("✏️ Modifier une ruche existante")
         selected_edit = st.selectbox("Sélectionner la ruche à modifier", [f"{r['ID']} — {r['Nom']}" for _,r in df.iterrows()])
@@ -1100,7 +1177,7 @@ elif current_page == "ruches":
                 st.balloons()
 
 # ─────────────────────────────────────────────
-# PAGE: INSPECTIONS
+# PAGE: INSPECTIONS (inchangée)
 # ─────────────────────────────────────────────
 elif current_page == "inspections":
     st.markdown('<div class="page-title">🔍 Inspections</div>', unsafe_allow_html=True)
@@ -1168,7 +1245,7 @@ elif current_page == "inspections":
             st.download_button("⬇ Exporter CSV", csv_insp, "inspections.csv", "text/csv")
 
 # ─────────────────────────────────────────────
-# PAGE: TRAITEMENTS
+# PAGE: TRAITEMENTS (inchangée)
 # ─────────────────────────────────────────────
 elif current_page == "traitements":
     st.markdown('<div class="page-title">💊 Traitements Vétérinaires</div>', unsafe_allow_html=True)
@@ -1231,7 +1308,7 @@ elif current_page == "traitements":
                     st.rerun()
 
 # ─────────────────────────────────────────────
-# PAGE: MIEL
+# PAGE: MIEL (inchangée)
 # ─────────────────────────────────────────────
 elif current_page == "miel":
     st.markdown('<div class="page-title">🍯 Production de Miel</div>', unsafe_allow_html=True)
@@ -1319,7 +1396,7 @@ elif current_page == "miel":
             st.download_button("⬇ Exporter CSV", csv, "recoltes_miel.csv","text/csv")
 
 # ─────────────────────────────────────────────
-# PAGE: POLLEN
+# PAGE: POLLEN (inchangée)
 # ─────────────────────────────────────────────
 elif current_page == "pollen":
     st.markdown('<div class="page-title">🌼 Production de Pollen</div>', unsafe_allow_html=True)
@@ -1393,7 +1470,7 @@ elif current_page == "pollen":
         st.dataframe(pd.DataFrame(pal_data), use_container_width=True, hide_index=True)
 
 # ─────────────────────────────────────────────
-# PAGE: GELÉE ROYALE
+# PAGE: GELÉE ROYALE (inchangée)
 # ─────────────────────────────────────────────
 elif current_page == "gelee":
     st.markdown('<div class="page-title">👑 Gelée Royale</div>', unsafe_allow_html=True)
@@ -1473,7 +1550,7 @@ elif current_page == "gelee":
                 use_container_width=True, hide_index=True)
 
 # ─────────────────────────────────────────────
-# PAGE: MORPHOMÉTRIE
+# PAGE: MORPHOMÉTRIE (inchangée)
 # ─────────────────────────────────────────────
 elif current_page == "morphometrie":
     st.markdown('<div class="page-title">🔬 Morphométrie des Abeilles</div>', unsafe_allow_html=True)
@@ -1591,7 +1668,7 @@ elif current_page == "morphometrie":
             st.info("Aucune analyse enregistrée.")
 
 # ─────────────────────────────────────────────
-# PAGE: GÉNÉTIQUE
+# PAGE: GÉNÉTIQUE (inchangée)
 # ─────────────────────────────────────────────
 elif current_page == "genetique":
     st.markdown('<div class="page-title">🧬 Génétique & Sélection</div>', unsafe_allow_html=True)
@@ -1647,7 +1724,7 @@ elif current_page == "genetique":
             </div>""", unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
-# PAGE: CARACTÉRISATION
+# PAGE: CARACTÉRISATION (inchangée)
 # ─────────────────────────────────────────────
 elif current_page == "caracterisation":
     st.markdown('<div class="page-title">📈 Caractérisation des Abeilles</div>', unsafe_allow_html=True)
@@ -1759,7 +1836,7 @@ elif current_page == "caracterisation":
             st.info("scikit-learn requis : `pip install scikit-learn`")
 
 # ─────────────────────────────────────────────
-# PAGE: CARTOGRAPHIE
+# PAGE: CARTOGRAPHIE (inchangée)
 # ─────────────────────────────────────────────
 elif current_page == "carte":
     st.markdown('<div class="page-title">🗺️ Cartographie des zones mellifères</div>', unsafe_allow_html=True)
@@ -1837,7 +1914,69 @@ elif current_page == "carte":
             st.info("Aucune zone enregistrée.")
 
 # ─────────────────────────────────────────────
-# PAGE: FLORE
+# PAGE: IA ANALYSIS (SATELLITE + DEEP LEARNING)
+# ─────────────────────────────────────────────
+elif current_page == "ia_analysis":
+    st.markdown('<div class="page-title">🤖 Analyse IA des zones mellifères</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Utilisez l’intelligence artificielle et les images satellites pour localiser les meilleurs emplacements</div>', unsafe_allow_html=True)
+
+    # Vérification des dépendances
+    try:
+        import matplotlib.pyplot as plt
+        import tensorflow as tf
+        from sentinelhub import BBox, CRS, SentinelHubRequest, DataCollection, MimeType
+    except ImportError:
+        st.error("Bibliothèques manquantes. Exécutez : pip install matplotlib sentinelhub tensorflow")
+        st.stop()
+
+    # Zone géographique (coordonnées par défaut – Tlemcen)
+    col1, col2 = st.columns(2)
+    with col1:
+        lat_center = st.number_input("Latitude centre", value=34.8825, format="%.4f")
+        lng_center = st.number_input("Longitude centre", value=-1.3167, format="%.4f")
+    with col2:
+        zoom = st.slider("Zoom (taille zone)", min_value=5, max_value=15, value=12)
+        date_start = st.date_input("Date début", value=datetime(2024, 5, 1))
+        date_end = st.date_input("Date fin", value=datetime(2024, 6, 30))
+
+    # Définir la bounding box (environ 5 km autour du centre)
+    delta = 0.05 * (15 / zoom)  # ajustement dynamique
+    bbox = [lng_center - delta, lat_center - delta, lng_center + delta, lat_center + delta]
+
+    if st.button("🔍 Analyser cette zone", type="primary"):
+        with st.spinner("Téléchargement et analyse de l’image satellite..."):
+            image = get_sentinel_image(bbox, date_start.isoformat(), date_end.isoformat())
+            if image is not None:
+                ndvi = compute_ndvi(image)
+                # Affichage NDVI
+                st.subheader("🌿 Indice NDVI (santé de la végétation)")
+                fig_ndvi, ax = plt.subplots()
+                im = ax.imshow(ndvi, cmap='RdYlGn', vmin=-0.5, vmax=0.8)
+                plt.colorbar(im, ax=ax, label="NDVI")
+                st.pyplot(fig_ndvi)
+
+                # Chargement modèle (optionnel)
+                model = load_segmentation_model()
+                if model is not None:
+                    st.subheader("🧠 Prédiction des zones mellifères")
+                    mask = predict_zones(model, image)
+                    fig_mask, ax2 = plt.subplots()
+                    ax2.imshow(mask, cmap='viridis')
+                    ax2.set_title("Zones potentiellement riches (masque)")
+                    st.pyplot(fig_mask)
+                else:
+                    st.info("Aucun modèle de segmentation chargé. Seul l’indice NDVI est disponible.")
+            else:
+                st.error("Impossible de récupérer l’image. Vérifiez vos identifiants Sentinel Hub.")
+
+    # Affichage de la carte interactive avec la bounding box
+    st.subheader("🗺️ Zone sélectionnée")
+    m = folium.Map(location=[lat_center, lng_center], zoom_start=zoom)
+    folium.Rectangle(bounds=[[bbox[1], bbox[0]], [bbox[3], bbox[2]]], color='red', fill=False).add_to(m)
+    st_folium(m, width=700, height=400)
+
+# ─────────────────────────────────────────────
+# PAGE: FLORE (inchangée)
 # ─────────────────────────────────────────────
 elif current_page == "flore":
     st.markdown('<div class="page-title">🌸 Flore Mellifère</div>', unsafe_allow_html=True)
@@ -1867,7 +2006,7 @@ elif current_page == "flore":
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
 
 # ─────────────────────────────────────────────
-# PAGE: MÉTÉO
+# PAGE: MÉTÉO (inchangée)
 # ─────────────────────────────────────────────
 elif current_page == "meteo":
     st.markdown('<div class="page-title">🌤️ Météo & Miellée</div>', unsafe_allow_html=True)
@@ -1908,7 +2047,7 @@ elif current_page == "meteo":
     st.markdown(alert("💡","<strong>Conseil :</strong> Les journées idéales pour le butinage : température > 15°C, vent < 25 km/h, humidité < 80%, ciel dégagé ou partiellement nuageux.","alert-info"), unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
-# PAGE: RAPPORTS
+# PAGE: RAPPORTS (inchangée)
 # ─────────────────────────────────────────────
 elif current_page == "rapports":
     st.markdown('<div class="page-title">📋 Rapports & Exports</div>', unsafe_allow_html=True)
@@ -1968,7 +2107,7 @@ elif current_page == "rapports":
                 st.download_button(f"{icon} {title}", csv, f"apitrack_{fname}.csv","text/csv", use_container_width=True)
 
 # ─────────────────────────────────────────────
-# PAGE: ALERTES
+# PAGE: ALERTES (inchangée)
 # ─────────────────────────────────────────────
 elif current_page == "alertes":
     st.markdown('<div class="page-title">🚨 Alertes & Notifications</div>', unsafe_allow_html=True)
@@ -2004,7 +2143,7 @@ elif current_page == "alertes":
         st.markdown(alert(icon, txt, cls_map.get(level,"alert-info")), unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
-# PAGE: JOURNAL
+# PAGE: JOURNAL (inchangée)
 # ─────────────────────────────────────────────
 elif current_page == "journal":
     st.markdown('<div class="page-title">📓 Journal d\'activité</div>', unsafe_allow_html=True)
@@ -2030,7 +2169,7 @@ elif current_page == "journal":
         st.download_button("⬇ Exporter le journal", csv_j, "journal_apitrack.csv","text/csv")
 
 # ─────────────────────────────────────────────
-# PAGE: ADMINISTRATION
+# PAGE: ADMINISTRATION (inchangée)
 # ─────────────────────────────────────────────
 elif current_page == "admin":
     st.markdown('<div class="page-title">💾 Administration</div>', unsafe_allow_html=True)
