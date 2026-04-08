@@ -1,6 +1,6 @@
 """
 ApiTrack Pro v2.1 — Plateforme Apicole Professionnelle
-Auteur : Mohammed A. | Région de l'Oranie, Algérie
+Auteur : RAHIM S. | Région de l'Oranie, Algérie
 Morphométrie selon Ruttner (1988) · Données Chahbar et al. (2013)
 """
 
@@ -395,7 +395,7 @@ def init_db():
     )""")
 
     # Admin par défaut
-    c.execute("INSERT OR IGNORE INTO settings VALUES ('apiculteur','Mohammed A.')")
+    c.execute("INSERT OR IGNORE INTO settings VALUES ('apiculteur','RAHIM S.')")
     c.execute("INSERT OR IGNORE INTO settings VALUES ('rucher','Rucher de l\\'Oranie')")
     c.execute("INSERT OR IGNORE INTO settings VALUES ('region','Tlemcen, Algérie')")
 
