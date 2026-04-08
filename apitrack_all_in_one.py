@@ -396,8 +396,8 @@ def init_db():
 
     # Admin par défaut
     c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ("apiculteur", "RAHIM S."))
-    c.execute("INSERT OR IGNORE INTO settings VALUES ('rucher','Rucher de l\\'Oranie')")
-    c.execute("INSERT OR IGNORE INTO settings VALUES ('region','Tlemcen, Algérie')")
+    c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ("rucher", "Rucher de l'Oranie"))
+    c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ("region", "Tlemcen, Algérie"))
 
     # User admin par défaut (mot de passe: admin1234)
     default_pwd = hashlib.sha256("admin1234".encode()).hexdigest()
