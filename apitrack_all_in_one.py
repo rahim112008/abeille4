@@ -1,1288 +1,18 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-╔══════════════════════════════════════════════════════════════════════════════╗
-║           ApiTrack Pro v3.0 — Plateforme Apicole Professionnelle           ║
-║                         FICHIER UNIQUE COMPLET                              ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║  ✅ Données persistantes      → dossier apitrack_data/ (survit extinction)  ║
-║  ✅ Sauvegarde automatique    → ZIP quotidien dans apitrack_data/sauvegardes/║
-║  ✅ IA Morphométrie gratuite  → Gemini / Groq / Ollama (fallback auto)      ║
-║  ✅ 19 caractères Ruttner     → Classification raciale complète              ║
-║  ✅ Profil productif IA       → Miel / Pollen / Gelée Royale / Propolis     ║
-║  ✅ Diagnostic sanitaire IA   → Ruche / Cadre / Colonie                     ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║  DÉMARRAGE :                                                                ║
-║    pip install streamlit pandas plotly pillow requests google-generativeai  ║
-║    streamlit run apitrack_all_in_one.py                                     ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║  CONFIGURATION IA GRATUITE (.streamlit/secrets.toml) :                      ║
-║    GEMINI_API_KEY = "AIza..."   → aistudio.google.com/apikey  (gratuit)    ║
-║    GROQ_API_KEY   = "gsk_..."   → console.groq.com/keys       (gratuit)    ║
-║    OLLAMA_BASE_URL = "http://localhost:11434"  (local, illimité, hors ligne) ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║  Ruttner (1988) · Kandemir (2011) · Chahbar et al. (2013)                  ║
-║  Région de l'Oranie — Algérie · 🐝 Apiculture scientifique et professionnelle║
-╚══════════════════════════════════════════════════════════════════════════════╝
-"""
-
-# -*- coding: utf-8 -*-
-"""
-ApiTrack Pro — Plateforme Apicole Ultra-Professionnelle v3.0
-IA Morphométrie GRATUITE & PERMANENTE :
-  ✅ Google Gemini 2.0 Flash  (gratuit : 15 req/min, 1M tokens/jour, VISION)
-  ✅ Ollama / LLaVA           (100% local, gratuit, illimité, hors ligne)
-  ✅ Groq + LLaMA 3.2 Vision  (gratuit : 30 req/min, vision disponible)
-  ✅ Fallback intelligent automatique
-"""
-
-import streamlit as st
-import pandas as pd
-import numpy as np
-import plotly.graph_objects as go
-import plotly.express as px
-from datetime import datetime, timedelta
-import json, base64, io, os, re, time, math
-import warnings
-warnings.filterwarnings("ignore")
-from PIL import Image, ImageEnhance, ImageFilter, ImageDraw
-
-# ── Gestionnaire de données persistantes ──────────────────────────────────────
-# =====================================================
-# GESTIONNAIRE DE DONNÉES PERSISTANTES (intégré)
-# Dossier : apitrack_data/ — Survit à l'extinction PC/smartphone
-# =====================================================
-
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-ApiTrack Pro — Gestionnaire de données persistantes
-Toutes les données sont sauvegardées dans le dossier 'apitrack_data/'
-Survit à l'extinction du PC/smartphone.
-
-Structure du dossier :
-  apitrack_data/
-  ├── ruches.csv
-  ├── inspections.csv
-  ├── recoltes.csv
-  ├── traitements.csv
-  ├── morpho_analyses.csv
-  ├── stock.csv
-  ├── genetique.csv
-  ├── alertes.csv
-  ├── config.json
-  └── sauvegardes/
-      ├── backup_2025-04-06_14h30.zip
-      ├── backup_2025-04-05_09h00.zip
-      └── ...
-"""
-
-import os, json, shutil, zipfile, hashlib
-import pandas as pd
-from datetime import datetime
-from pathlib import Path
-
-# ─── Dossier principal de données ──────────────────────────────────────────────
-DATA_DIR    = Path("apitrack_data")
-BACKUP_DIR  = DATA_DIR / "sauvegardes"
-CONFIG_FILE = DATA_DIR / "config.json"
-
-# ─── Schémas des tables (colonnes + valeurs par défaut) ────────────────────────
-SCHEMAS = {
-    "ruches": {
-        "file": "ruches.csv",
-        "cols": ["ID","Nom","Race","Site","Type_ruche","Poids_kg","Varroa_pct",
-                 "Miel_kg","Pollen_kg","Gelée_g","Propolis_kg","Cire_kg",
-                 "Statut","Reine_id","VSH_pct","Douceur","Economie_hiv",
-                 "Essaimage_pct","Date_creation","Profil_prod",
-                 "Glossa_mm","L_aile_mm","Ri","Tomentum_pct","Pigment_scutellum","Ti_L_mm",
-                 "Notes","Date_modif"],
-        "demo": [
-            {"ID":"A-03","Nom":"Reine Dorée","Race":"A. m. intermissa","Site":"Verger du Cèdre",
-             "Type_ruche":"Dadant 10 cadres","Poids_kg":22.3,"Varroa_pct":1.2,
-             "Miel_kg":18.5,"Pollen_kg":2.8,"Gelée_g":145,"Propolis_kg":0.05,"Cire_kg":0.3,
-             "Statut":"Excellent","Reine_id":"R-2024-01","VSH_pct":78,"Douceur":88,
-             "Economie_hiv":82,"Essaimage_pct":25,"Date_creation":"2022-03-15","Profil_prod":"Miel",
-             "Glossa_mm":6.12,"L_aile_mm":9.18,"Ri":2.45,"Tomentum_pct":37,"Pigment_scutellum":5,"Ti_L_mm":3.01,
-             "Notes":"Colonie phare du rucher","Date_modif":datetime.now().strftime("%Y-%m-%d")},
-            {"ID":"B-07","Nom":"Bergère","Race":"A. m. sahariensis","Site":"Colline des Oliviers",
-             "Type_ruche":"Dadant 10 cadres","Poids_kg":16.8,"Varroa_pct":3.8,
-             "Miel_kg":11.2,"Pollen_kg":4.5,"Gelée_g":62,"Propolis_kg":0.08,"Cire_kg":0.2,
-             "Statut":"Critique","Reine_id":"R-2024-07","VSH_pct":52,"Douceur":60,
-             "Economie_hiv":65,"Essaimage_pct":55,"Date_creation":"2022-06-10","Profil_prod":"Pollen",
-             "Glossa_mm":5.98,"L_aile_mm":8.92,"Ri":2.22,"Tomentum_pct":28,"Pigment_scutellum":6,"Ti_L_mm":2.85,
-             "Notes":"Traitement varroa en cours","Date_modif":datetime.now().strftime("%Y-%m-%d")},
-            {"ID":"C-12","Nom":"Atlas","Race":"A. m. intermissa","Site":"Verger du Cèdre",
-             "Type_ruche":"Langstroth","Poids_kg":20.1,"Varroa_pct":0.8,
-             "Miel_kg":15.0,"Pollen_kg":3.1,"Gelée_g":198,"Propolis_kg":0.06,"Cire_kg":0.25,
-             "Statut":"Excellent","Reine_id":"R-2023-14","VSH_pct":81,"Douceur":92,
-             "Economie_hiv":88,"Essaimage_pct":18,"Date_creation":"2021-04-20","Profil_prod":"Gelée Royale",
-             "Glossa_mm":6.22,"L_aile_mm":9.41,"Ri":2.61,"Tomentum_pct":41,"Pigment_scutellum":4,"Ti_L_mm":3.18,
-             "Notes":"Excellente productrice gelée","Date_modif":datetime.now().strftime("%Y-%m-%d")},
-            {"ID":"D-02","Nom":"Soleil d'Or","Race":"Hybride","Site":"Plaine des Fleurs",
-             "Type_ruche":"Dadant 10 cadres","Poids_kg":25.4,"Varroa_pct":1.5,
-             "Miel_kg":16.3,"Pollen_kg":2.2,"Gelée_g":88,"Propolis_kg":0.04,"Cire_kg":0.35,
-             "Statut":"Bon","Reine_id":"R-2024-03","VSH_pct":67,"Douceur":75,
-             "Economie_hiv":72,"Essaimage_pct":38,"Date_creation":"2023-02-28","Profil_prod":"Miel",
-             "Glossa_mm":6.48,"L_aile_mm":9.52,"Ri":2.91,"Tomentum_pct":48,"Pigment_scutellum":2,"Ti_L_mm":3.24,
-             "Notes":"Essaimage prévu","Date_modif":datetime.now().strftime("%Y-%m-%d")},
-            {"ID":"A-08","Nom":"Jasmine","Race":"A. m. intermissa","Site":"Plaine des Fleurs",
-             "Type_ruche":"Dadant 10 cadres","Poids_kg":18.2,"Varroa_pct":2.1,
-             "Miel_kg":12.8,"Pollen_kg":3.8,"Gelée_g":112,"Propolis_kg":0.03,"Cire_kg":0.18,
-             "Statut":"Attention","Reine_id":"R-2024-05","VSH_pct":71,"Douceur":83,
-             "Economie_hiv":76,"Essaimage_pct":32,"Date_creation":"2023-05-12","Profil_prod":"Pollen",
-             "Glossa_mm":6.05,"L_aile_mm":9.24,"Ri":2.51,"Tomentum_pct":34,"Pigment_scutellum":5,"Ti_L_mm":3.04,
-             "Notes":"Surveiller varroa","Date_modif":datetime.now().strftime("%Y-%m-%d")},
-            {"ID":"C-05","Nom":"Nuit Étoilée","Race":"A. m. intermissa","Site":"Verger du Cèdre",
-             "Type_ruche":"Warré","Poids_kg":14.5,"Varroa_pct":0.5,
-             "Miel_kg":10.5,"Pollen_kg":2.1,"Gelée_g":76,"Propolis_kg":0.07,"Cire_kg":0.15,
-             "Statut":"Attention","Reine_id":"R-2023-22","VSH_pct":83,"Douceur":90,
-             "Economie_hiv":85,"Essaimage_pct":15,"Date_creation":"2021-07-08","Profil_prod":"Résistance",
-             "Glossa_mm":6.08,"L_aile_mm":9.31,"Ri":2.48,"Tomentum_pct":39,"Pigment_scutellum":5,"Ti_L_mm":3.09,
-             "Notes":"Bonne résistance VSH","Date_modif":datetime.now().strftime("%Y-%m-%d")},
-            {"ID":"B-11","Nom":"Montagne Bleue","Race":"A. m. carnica","Site":"Colline des Oliviers",
-             "Type_ruche":"Dadant 10 cadres","Poids_kg":19.8,"Varroa_pct":1.0,
-             "Miel_kg":14.2,"Pollen_kg":2.5,"Gelée_g":165,"Propolis_kg":0.05,"Cire_kg":0.22,
-             "Statut":"Excellent","Reine_id":"R-2023-08","VSH_pct":76,"Douceur":95,
-             "Economie_hiv":90,"Essaimage_pct":22,"Date_creation":"2022-09-01","Profil_prod":"Gelée Royale",
-             "Glossa_mm":6.55,"L_aile_mm":9.48,"Ri":2.98,"Tomentum_pct":43,"Pigment_scutellum":2,"Ti_L_mm":3.21,
-             "Notes":"Race Carnica, très douce","Date_modif":datetime.now().strftime("%Y-%m-%d")},
-            {"ID":"D-09","Nom":"Zephyr","Race":"A. m. ligustica","Site":"Plaine des Fleurs",
-             "Type_ruche":"Dadant 10 cadres","Poids_kg":21.5,"Varroa_pct":1.3,
-             "Miel_kg":17.1,"Pollen_kg":2.0,"Gelée_g":95,"Propolis_kg":0.04,"Cire_kg":0.28,
-             "Statut":"Bon","Reine_id":"R-2024-09","VSH_pct":63,"Douceur":88,
-             "Economie_hiv":70,"Essaimage_pct":42,"Date_creation":"2023-08-15","Profil_prod":"Miel",
-             "Glossa_mm":6.52,"L_aile_mm":9.61,"Ri":2.85,"Tomentum_pct":52,"Pigment_scutellum":1,"Ti_L_mm":3.28,
-             "Notes":"Race Italienne importée","Date_modif":datetime.now().strftime("%Y-%m-%d")},
-        ]
-    },
-    "inspections": {
-        "file": "inspections.csv",
-        "cols": ["ID","Date","Ruche","Poids_kg","Temperature_int","Cadres_couverts","Cadres_couvain",
-                 "Varroa","Reine","Reserves","Comportement","Maladie_signes","Statut_general","Notes","Analyste"],
-        "demo": [
-            {"ID":"INS-001","Date":"2025-03-25","Ruche":"A-03","Poids_kg":22.3,"Temperature_int":35.1,
-             "Cadres_couverts":8,"Cadres_couvain":6,"Varroa":"Faible (<1%)","Reine":"Observée",
-             "Reserves":"Excellentes (>15 kg)","Comportement":"Calme","Maladie_signes":"Aucun",
-             "Statut_general":"Excellent","Notes":"Colonie forte, ponte active","Analyste":"Mohammed A."},
-            {"ID":"INS-002","Date":"2025-03-20","Ruche":"B-07","Poids_kg":16.8,"Temperature_int":34.6,
-             "Cadres_couverts":5,"Cadres_couvain":3,"Varroa":"Élevée (>3%)","Reine":"Observée",
-             "Reserves":"Faibles (3-8 kg)","Comportement":"Nerveux","Maladie_signes":"Varroa visible",
-             "Statut_general":"Critique","Notes":"Traitement acide oxalique initié","Analyste":"Mohammed A."},
-            {"ID":"INS-003","Date":"2025-03-15","Ruche":"C-12","Poids_kg":20.1,"Temperature_int":35.3,
-             "Cadres_couverts":9,"Cadres_couvain":7,"Varroa":"Aucune","Reine":"Observée",
-             "Reserves":"Excellentes (>15 kg)","Comportement":"Calme","Maladie_signes":"Aucun",
-             "Statut_general":"Excellent","Notes":"Récolte gelée royale programmée","Analyste":"Mohammed A."},
-        ]
-    },
-    "recoltes": {
-        "file": "recoltes.csv",
-        "cols": ["ID","Date","Ruche","Type","Produit","Quantite_kg","Humidite_pct",
-                 "Couleur","Qualite_score","Prix_kg","Certification","Notes","Analyste"],
-        "demo": [
-            {"ID":"REC-001","Date":"2024-06-15","Ruche":"A-03","Type":"miel","Produit":"Miel de jujubier",
-             "Quantite_kg":8.5,"Humidite_pct":17.2,"Couleur":"Amber","Qualite_score":92,"Prix_kg":18.0,
-             "Certification":"Standard","Notes":"Excellente récolte","Analyste":"Mohammed A."},
-            {"ID":"REC-002","Date":"2024-06-15","Ruche":"B-07","Type":"pollen","Produit":"Pollen de romarin",
-             "Quantite_kg":1.8,"Humidite_pct":8.5,"Couleur":"Jaune doré","Qualite_score":88,"Prix_kg":45.0,
-             "Certification":"Standard","Notes":"Bien séché","Analyste":"Mohammed A."},
-            {"ID":"REC-003","Date":"2024-06-15","Ruche":"C-12","Type":"gelée_royale","Produit":"Gelée royale fraîche",
-             "Quantite_kg":0.145,"Humidite_pct":66.0,"Couleur":"Blanc crémeux","Qualite_score":95,"Prix_kg":1200.0,
-             "Certification":"Standard","Notes":"10-HDA : 1.85%","Analyste":"Mohammed A."},
-            {"ID":"REC-004","Date":"2024-07-01","Ruche":"D-02","Type":"miel","Produit":"Miel d'eucalyptus",
-             "Quantite_kg":16.3,"Humidite_pct":16.9,"Couleur":"Light Amber","Qualite_score":89,"Prix_kg":17.0,
-             "Certification":"Standard","Notes":"","Analyste":"Mohammed A."},
-            {"ID":"REC-005","Date":"2024-05-20","Ruche":"A-08","Type":"pollen","Produit":"Pollen mixte",
-             "Quantite_kg":2.1,"Humidite_pct":8.1,"Couleur":"Multicolore","Qualite_score":85,"Prix_kg":45.0,
-             "Certification":"Standard","Notes":"","Analyste":"Mohammed A."},
-            {"ID":"REC-006","Date":"2024-08-10","Ruche":"C-05","Type":"propolis","Produit":"Propolis brute",
-             "Quantite_kg":0.08,"Humidite_pct":None,"Couleur":"Brun foncé","Qualite_score":82,"Prix_kg":30.0,
-             "Certification":"Standard","Notes":"","Analyste":"Mohammed A."},
-        ]
-    },
-    "traitements": {
-        "file": "traitements.csv",
-        "cols": ["ID","Date_debut","Date_fin","Ruche","Produit","Pathologie","Dose","Methode",
-                 "Duree_j","Statut","Progression_pct","Temperature_app","Notes","Analyste"],
-        "demo": [
-            {"ID":"TRT-001","Date_debut":"2025-03-20","Date_fin":"2025-04-10","Ruche":"B-07",
-             "Produit":"Acide oxalique","Pathologie":"Varroa destructor","Dose":"5ml/ruche",
-             "Methode":"Sublimation","Duree_j":21,"Statut":"En cours","Progression_pct":52,
-             "Temperature_app":18,"Notes":"3ème application","Analyste":"Mohammed A."},
-            {"ID":"TRT-002","Date_debut":"2025-03-10","Date_fin":"2025-03-31","Ruche":"A-03",
-             "Produit":"Apiguard (thymol)","Pathologie":"Varroa destructor","Dose":"1 plateau",
-             "Methode":"Lanière","Duree_j":21,"Statut":"Terminé","Progression_pct":100,
-             "Temperature_app":20,"Notes":"Résultat : 92% efficacité","Analyste":"Mohammed A."},
-        ]
-    },
-    "morpho_analyses": {
-        "file": "morpho_analyses.csv",
-        "cols": ["ID","Date","Ruche","Taxon","Confiance_pct","L_aile_mm","B_aile_mm","Ri",
-                 "DI3_mm","OI","A4_deg","B4_deg","Ti_L_mm","Ba_L_mm","T3_L_mm","T4_W_pct",
-                 "Glossa_mm","Wt_mm","Pigment","Hb_mm","Integrite_ailes","Nervation",
-                 "Profil_prod","Score_miel","Score_pollen","Score_gelee","Score_propolis",
-                 "Langue_classe","VSH_estime","Comportement_hygienique",
-                 "Etat_sanitaire","Anomalies","Source_IA","Analyste","Notes","Image_hash"],
-        "demo": [
-            {"ID":"MOR-001","Date":"2025-02-14","Ruche":"A-03","Taxon":"A. m. intermissa","Confiance_pct":92,
-             "L_aile_mm":9.18,"B_aile_mm":3.21,"Ri":2.45,"DI3_mm":1.72,"OI":"−","A4_deg":99.2,"B4_deg":91.5,
-             "Ti_L_mm":3.01,"Ba_L_mm":1.88,"T3_L_mm":4.78,"T4_W_pct":37,"Glossa_mm":6.12,"Wt_mm":4.12,
-             "Pigment":5,"Hb_mm":0.38,"Integrite_ailes":"intactes","Nervation":"normale",
-             "Profil_prod":"miel","Score_miel":78,"Score_pollen":62,"Score_gelee":32,"Score_propolis":45,
-             "Langue_classe":"moyenne","VSH_estime":70,"Comportement_hygienique":"moyen",
-             "Etat_sanitaire":"sain","Anomalies":"","Source_IA":"Démonstration",
-             "Analyste":"Mohammed A.","Notes":"Analyse initiale","Image_hash":""},
-        ]
-    },
-    "stock": {
-        "file": "stock.csv",
-        "cols": ["ID","Article","Categorie","Quantite","Unite","Seuil_alerte","Prix_unitaire",
-                 "Fournisseur","Date_achat","Localisation","Notes"],
-        "demo": [
-            {"ID":"STK-001","Article":"Cadres Dadant","Categorie":"Matériel","Quantite":145,"Unite":"pièces",
-             "Seuil_alerte":50,"Prix_unitaire":2.5,"Fournisseur":"Api-France","Date_achat":"2024-01-15",
-             "Localisation":"Hangar A","Notes":""},
-            {"ID":"STK-002","Article":"Cire gaufrée","Categorie":"Consommable","Quantite":1.2,"Unite":"kg",
-             "Seuil_alerte":5.0,"Prix_unitaire":12.0,"Fournisseur":"Local","Date_achat":"2024-02-01",
-             "Localisation":"Hangar A","Notes":"Stock critique"},
-            {"ID":"STK-003","Article":"Acide oxalique","Categorie":"Traitement","Quantite":350,"Unite":"g",
-             "Seuil_alerte":500,"Prix_unitaire":0.02,"Fournisseur":"Vétérinaire","Date_achat":"2025-01-10",
-             "Localisation":"Armoire traitements","Notes":""},
-            {"ID":"STK-004","Article":"Apiguard","Categorie":"Traitement","Quantite":6,"Unite":"boîtes",
-             "Seuil_alerte":4,"Prix_unitaire":8.5,"Fournisseur":"Vétérinaire","Date_achat":"2025-02-05",
-             "Localisation":"Armoire traitements","Notes":""},
-            {"ID":"STK-005","Article":"Pots 500g","Categorie":"Conditionnement","Quantite":280,"Unite":"pièces",
-             "Seuil_alerte":200,"Prix_unitaire":0.45,"Fournisseur":"Emballage DZ","Date_achat":"2024-11-20",
-             "Localisation":"Hangar B","Notes":""},
-            {"ID":"STK-006","Article":"Trappe à pollen","Categorie":"Matériel","Quantite":3,"Unite":"pièces",
-             "Seuil_alerte":2,"Prix_unitaire":15.0,"Fournisseur":"Local","Date_achat":"2023-04-01",
-             "Localisation":"Hangar A","Notes":""},
-            {"ID":"STK-007","Article":"Kit gelée royale","Categorie":"Matériel","Quantite":1,"Unite":"kit",
-             "Seuil_alerte":1,"Prix_unitaire":120.0,"Fournisseur":"Apiculture Pro","Date_achat":"2024-03-15",
-             "Localisation":"Hangar A","Notes":""},
-            {"ID":"STK-008","Article":"Combinaison + voile","Categorie":"EPI","Quantite":2,"Unite":"pièces",
-             "Seuil_alerte":1,"Prix_unitaire":45.0,"Fournisseur":"Local","Date_achat":"2023-01-01",
-             "Localisation":"Hangar A","Notes":""},
-        ]
-    },
-    "genetique": {
-        "file": "genetique.csv",
-        "cols": ["ID_Reine","Ruche","Race","Date_naissance","Origine","Ligne_genetique",
-                 "VSH_pct","Douceur","Productivite_miel","Production_pollen","Production_gelee",
-                 "Economie_hiv","Anti_essaimage","Statut_reine","Notes"],
-        "demo": [
-            {"ID_Reine":"R-2024-01","Ruche":"A-03","Race":"A. m. intermissa","Date_naissance":"2024-05-15",
-             "Origine":"Sélection massale","Ligne_genetique":"Ligne 3","VSH_pct":78,"Douceur":88,
-             "Productivite_miel":85,"Production_pollen":65,"Production_gelee":35,
-             "Economie_hiv":82,"Anti_essaimage":75,"Statut_reine":"Active","Notes":"Meilleure de la saison"},
-            {"ID_Reine":"R-2024-07","Ruche":"B-07","Race":"Hybride","Date_naissance":"2024-06-20",
-             "Origine":"Inconnue","Ligne_genetique":"—","VSH_pct":52,"Douceur":60,
-             "Productivite_miel":60,"Production_pollen":75,"Production_gelee":25,
-             "Economie_hiv":65,"Anti_essaimage":45,"Statut_reine":"Active","Notes":"Renouvellement recommandé"},
-            {"ID_Reine":"R-2023-14","Ruche":"C-12","Race":"A. m. intermissa","Date_naissance":"2023-06-10",
-             "Origine":"Sélection massale","Ligne_genetique":"Ligne 1","VSH_pct":81,"Douceur":92,
-             "Productivite_miel":78,"Production_pollen":68,"Production_gelee":82,
-             "Economie_hiv":88,"Anti_essaimage":82,"Statut_reine":"Active","Notes":"Excellente productrice gelée"},
-        ]
-    },
-    "alertes": {
-        "file": "alertes.csv",
-        "cols": ["ID","Date","Type","Ruche","Titre","Message","Priorite","Statut","Date_resolution","Notes"],
-        "demo": [
-            {"ID":"ALR-001","Date":"2025-04-01","Type":"critique","Ruche":"B-07",
-             "Titre":"Varroa critique","Message":"Taux varroa 3.8% — traitement urgent","Priorite":1,
-             "Statut":"active","Date_resolution":"","Notes":""},
-            {"ID":"ALR-002","Date":"2025-04-01","Type":"avertissement","Ruche":"A-08",
-             "Titre":"Varroa en hausse","Message":"Taux varroa 2.1% — surveillance renforcée","Priorite":2,
-             "Statut":"active","Date_resolution":"","Notes":""},
-            {"ID":"ALR-003","Date":"2025-03-28","Type":"stock","Ruche":"",
-             "Titre":"Stock bas — Cire gaufrée","Message":"1.2kg restant, seuil 5kg","Priorite":2,
-             "Statut":"active","Date_resolution":"","Notes":""},
-        ]
-    },
-}
-
-# ══════════════════════════════════════════════════════════════════════════════
-# INITIALISATION DU DOSSIER DE DONNÉES
-# ══════════════════════════════════════════════════════════════════════════════
-
-def init_data_dir():
-    """Crée le dossier de données s'il n'existe pas."""
-    DATA_DIR.mkdir(exist_ok=True)
-    BACKUP_DIR.mkdir(exist_ok=True)
-    if not CONFIG_FILE.exists():
-        config = {
-            "version": "3.0",
-            "apiculteur": "Mohammed A.",
-            "rucher": "Rucher de l'Oranie",
-            "region": "Tlemcen, Algérie",
-            "sauvegarde_auto": True,
-            "sauvegarde_frequence": "quotidienne",
-            "nb_sauvegardes_max": 30,
-            "date_creation": datetime.now().isoformat(),
-            "derniere_sauvegarde": "",
-            "derniere_modif": datetime.now().isoformat(),
-        }
-        save_config(config)
-    return True
-
-def save_config(config: dict):
-    """Sauvegarde la configuration."""
-    DATA_DIR.mkdir(exist_ok=True)
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(config, f, ensure_ascii=False, indent=2)
-
-def load_config() -> dict:
-    """Charge la configuration."""
-    if not CONFIG_FILE.exists():
-        init_data_dir()
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except:
-        return {}
-
-# ══════════════════════════════════════════════════════════════════════════════
-# CHARGEMENT DES DONNÉES (depuis CSV → DataFrame)
-# ══════════════════════════════════════════════════════════════════════════════
-
-def load_table(table_name: str) -> pd.DataFrame:
-    """
-    Charge une table depuis le fichier CSV.
-    Si le fichier n'existe pas → crée le dossier + fichier avec données démo.
-    """
-    init_data_dir()
-    schema = SCHEMAS.get(table_name)
-    if not schema:
-        return pd.DataFrame()
-
-    filepath = DATA_DIR / schema["file"]
-
-    if filepath.exists():
-        try:
-            df = pd.read_csv(filepath, encoding="utf-8-sig")
-            # Ajouter les colonnes manquantes
-            for col in schema["cols"]:
-                if col not in df.columns:
-                    df[col] = ""
-            return df[schema["cols"]]
-        except Exception as e:
-            print(f"⚠️ Erreur lecture {filepath}: {e}")
-
-    # Créer le fichier avec données démo
-    df = pd.DataFrame(schema["demo"])
-    for col in schema["cols"]:
-        if col not in df.columns:
-            df[col] = ""
-    df = df[schema["cols"]]
-    df.to_csv(filepath, index=False, encoding="utf-8-sig")
-    return df
-
-def load_all() -> dict:
-    """Charge toutes les tables. Retourne un dict {nom: DataFrame}."""
-    init_data_dir()
-    return {name: load_table(name) for name in SCHEMAS}
-
-# ══════════════════════════════════════════════════════════════════════════════
-# SAUVEGARDE DES DONNÉES (DataFrame → CSV)
-# ══════════════════════════════════════════════════════════════════════════════
-
-def save_table(table_name: str, df: pd.DataFrame) -> bool:
-    """
-    Sauvegarde un DataFrame dans son fichier CSV.
-    Retourne True si succès.
-    """
-    init_data_dir()
-    schema = SCHEMAS.get(table_name)
-    if not schema:
-        return False
-    try:
-        filepath = DATA_DIR / schema["file"]
-        # Garder seulement les colonnes connues + colonnes supplémentaires
-        cols_to_save = [c for c in schema["cols"] if c in df.columns]
-        extra_cols = [c for c in df.columns if c not in schema["cols"]]
-        df[cols_to_save + extra_cols].to_csv(filepath, index=False, encoding="utf-8-sig")
-        # Mettre à jour la date de modification dans config
-        try:
-            cfg = load_config()
-            cfg["derniere_modif"] = datetime.now().isoformat()
-            save_config(cfg)
-        except:
-            pass
-        return True
-    except Exception as e:
-        print(f"❌ Erreur sauvegarde {table_name}: {e}")
-        return False
-
-def save_all(data: dict) -> dict:
-    """
-    Sauvegarde toutes les tables.
-    data = {"ruches": df, "recoltes": df, ...}
-    Retourne {"ruches": True, "recoltes": True, ...}
-    """
-    results = {}
-    for name, df in data.items():
-        results[name] = save_table(name, df)
-    return results
-
-# ══════════════════════════════════════════════════════════════════════════════
-# AJOUT / MODIFICATION / SUPPRESSION D'ENREGISTREMENTS
-# ══════════════════════════════════════════════════════════════════════════════
-
-def add_record(table_name: str, record: dict, df: pd.DataFrame) -> pd.DataFrame:
-    """Ajoute un enregistrement et sauvegarde immédiatement."""
-    record["Date_modif"] = datetime.now().strftime("%Y-%m-%d")
-    new_row = pd.DataFrame([record])
-    df = pd.concat([df, new_row], ignore_index=True)
-    save_table(table_name, df)
-    return df
-
-def update_record(table_name: str, df: pd.DataFrame, id_col: str, id_val: str, updates: dict) -> pd.DataFrame:
-    """Met à jour un enregistrement existant et sauvegarde."""
-    mask = df[id_col] == id_val
-    for col, val in updates.items():
-        if col in df.columns:
-            df.loc[mask, col] = val
-    df.loc[mask, "Date_modif"] = datetime.now().strftime("%Y-%m-%d")
-    save_table(table_name, df)
-    return df
-
-def delete_record(table_name: str, df: pd.DataFrame, id_col: str, id_val: str) -> pd.DataFrame:
-    """Supprime un enregistrement et sauvegarde."""
-    df = df[df[id_col] != id_val].reset_index(drop=True)
-    save_table(table_name, df)
-    return df
-
-def generate_id(prefix: str, df: pd.DataFrame, id_col: str = "ID") -> str:
-    """Génère un ID unique basé sur le préfixe et le nombre d'enregistrements."""
-    if id_col not in df.columns or len(df) == 0:
-        return f"{prefix}-001"
-    existing = df[id_col].astype(str).tolist()
-    n = len(existing) + 1
-    new_id = f"{prefix}-{n:03d}"
-    while new_id in existing:
-        n += 1
-        new_id = f"{prefix}-{n:03d}"
-    return new_id
-
-# ══════════════════════════════════════════════════════════════════════════════
-# SYSTÈME DE SAUVEGARDE (ZIP)
-# ══════════════════════════════════════════════════════════════════════════════
-
-def create_backup(label: str = "") -> tuple[bool, str, str]:
-    """
-    Crée une sauvegarde ZIP de toutes les données.
-    Retourne (succès, chemin_fichier, nom_fichier)
-    """
-    init_data_dir()
-    ts = datetime.now().strftime("%Y-%m-%d_%Hh%M")
-    label_clean = f"_{label.replace(' ','_')}" if label else ""
-    zip_name = f"backup{label_clean}_{ts}.zip"
-    zip_path = BACKUP_DIR / zip_name
-
-    try:
-        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-            for schema_name, schema in SCHEMAS.items():
-                csv_path = DATA_DIR / schema["file"]
-                if csv_path.exists():
-                    zf.write(csv_path, schema["file"])
-            if CONFIG_FILE.exists():
-                zf.write(CONFIG_FILE, "config.json")
-            # Fichier de métadonnées
-            meta = {
-                "date_sauvegarde": datetime.now().isoformat(),
-                "label": label,
-                "version": "3.0",
-                "nb_fichiers": len(list(DATA_DIR.glob("*.csv"))),
-            }
-            zf.writestr("sauvegarde_info.json", json.dumps(meta, ensure_ascii=False, indent=2))
-
-        # Mettre à jour config
-        cfg = load_config()
-        cfg["derniere_sauvegarde"] = datetime.now().isoformat()
-        save_config(cfg)
-
-        # Nettoyer les anciennes sauvegardes
-        _cleanup_old_backups(cfg.get("nb_sauvegardes_max", 30))
-
-        return True, str(zip_path), zip_name
-    except Exception as e:
-        return False, "", str(e)
-
-def list_backups() -> list[dict]:
-    """Liste toutes les sauvegardes disponibles, triées par date (plus récent d'abord)."""
-    if not BACKUP_DIR.exists():
-        return []
-    backups = []
-    for f in sorted(BACKUP_DIR.glob("backup*.zip"), reverse=True):
-        stat = f.stat()
-        size_kb = stat.st_size / 1024
-        backups.append({
-            "nom": f.name,
-            "chemin": str(f),
-            "date": datetime.fromtimestamp(stat.st_mtime).strftime("%d/%m/%Y %H:%M"),
-            "taille": f"{size_kb:.1f} Ko",
-            "taille_bytes": stat.st_size,
-        })
-    return backups
-
-def restore_backup(zip_path: str) -> tuple[bool, str]:
-    """
-    Restaure les données depuis une sauvegarde ZIP.
-    Crée d'abord une sauvegarde automatique de sécurité.
-    Retourne (succès, message)
-    """
-    if not os.path.exists(zip_path):
-        return False, f"Fichier introuvable : {zip_path}"
-    try:
-        # Sauvegarde de sécurité avant restauration
-        create_backup("avant_restauration")
-        # Restauration
-        with zipfile.ZipFile(zip_path, "r") as zf:
-            for file_info in zf.infolist():
-                if file_info.filename.endswith(".csv"):
-                    zf.extract(file_info, DATA_DIR)
-                elif file_info.filename == "config.json":
-                    zf.extract(file_info, DATA_DIR)
-        return True, "Restauration réussie ! Les données ont été rechargées."
-    except Exception as e:
-        return False, f"Erreur de restauration : {str(e)}"
-
-def restore_from_upload(zip_bytes: bytes) -> tuple[bool, str]:
-    """Restaure depuis un fichier ZIP uploadé (bytes)."""
-    try:
-        # Sauvegarder le ZIP uploadé temporairement
-        tmp_path = DATA_DIR / "upload_temp.zip"
-        with open(tmp_path, "wb") as f:
-            f.write(zip_bytes)
-        success, msg = restore_backup(str(tmp_path))
-        tmp_path.unlink(missing_ok=True)
-        return success, msg
-    except Exception as e:
-        return False, str(e)
-
-def get_backup_zip_bytes(zip_path: str) -> bytes:
-    """Lit un fichier ZIP et retourne ses bytes (pour téléchargement Streamlit)."""
-    with open(zip_path, "rb") as f:
-        return f.read()
-
-def _cleanup_old_backups(max_count: int = 30):
-    """Supprime les anciennes sauvegardes au-delà de max_count."""
-    if not BACKUP_DIR.exists():
-        return
-    backups = sorted(BACKUP_DIR.glob("backup*.zip"), key=lambda f: f.stat().st_mtime, reverse=True)
-    for old in backups[max_count:]:
-        try:
-            old.unlink()
-        except:
-            pass
-
-# ══════════════════════════════════════════════════════════════════════════════
-# EXPORT / IMPORT
-# ══════════════════════════════════════════════════════════════════════════════
-
-def export_table_csv(table_name: str) -> tuple[bytes, str]:
-    """Exporte une table en CSV (bytes + nom de fichier)."""
-    df = load_table(table_name)
-    csv_bytes = df.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
-    filename = f"apitrack_{table_name}_{datetime.now().strftime('%Y%m%d')}.csv"
-    return csv_bytes, filename
-
-def export_all_csv_zip() -> bytes:
-    """Exporte toutes les tables dans un ZIP avec un CSV par table."""
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for name in SCHEMAS:
-            csv_bytes, filename = export_table_csv(name)
-            zf.writestr(filename, csv_bytes)
-        # Résumé JSON
-        cfg = load_config()
-        cfg["date_export"] = datetime.now().isoformat()
-        zf.writestr("apitrack_config.json", json.dumps(cfg, ensure_ascii=False, indent=2))
-    return buf.getvalue()
-
-def import_csv(table_name: str, csv_bytes: bytes) -> tuple[bool, str, int]:
-    """
-    Importe des données depuis un CSV uploadé.
-    Fusionne avec les données existantes (évite les doublons sur ID).
-    Retourne (succès, message, nb_nouveaux_enregistrements)
-    """
-    try:
-        import io as io_mod
-        df_import = pd.read_csv(io_mod.BytesIO(csv_bytes), encoding="utf-8-sig")
-        df_existing = load_table(table_name)
-        schema = SCHEMAS[table_name]
-        id_col = schema["cols"][0]  # Premier colonne = ID
-
-        if id_col in df_existing.columns and id_col in df_import.columns:
-            existing_ids = set(df_existing[id_col].astype(str).tolist())
-            df_new = df_import[~df_import[id_col].astype(str).isin(existing_ids)]
-            nb_new = len(df_new)
-            if nb_new > 0:
-                df_merged = pd.concat([df_existing, df_new], ignore_index=True)
-                save_table(table_name, df_merged)
-                return True, f"{nb_new} nouveaux enregistrements importés.", nb_new
-            return True, "Aucun nouvel enregistrement (tous déjà présents).", 0
-        else:
-            save_table(table_name, df_import)
-            return True, f"{len(df_import)} enregistrements importés (remplacement).", len(df_import)
-    except Exception as e:
-        return False, f"Erreur import : {str(e)}", 0
-
-# ══════════════════════════════════════════════════════════════════════════════
-# STATISTIQUES DU DOSSIER
-# ══════════════════════════════════════════════════════════════════════════════
-
-def get_storage_stats() -> dict:
-    """Retourne des statistiques sur l'espace de stockage utilisé."""
-    stats = {
-        "dossier": str(DATA_DIR.absolute()),
-        "tables": {},
-        "taille_totale_kb": 0,
-        "nb_sauvegardes": len(list_backups()),
-        "derniere_sauvegarde": load_config().get("derniere_sauvegarde","Jamais"),
-    }
-    for name, schema in SCHEMAS.items():
-        fp = DATA_DIR / schema["file"]
-        if fp.exists():
-            size = fp.stat().st_size
-            try:
-                df = pd.read_csv(fp, encoding="utf-8-sig")
-                nb = len(df)
-            except:
-                nb = 0
-            stats["tables"][name] = {"nb": nb, "taille_kb": round(size/1024, 2)}
-            stats["taille_totale_kb"] += size / 1024
-    stats["taille_totale_kb"] = round(stats["taille_totale_kb"], 2)
-    return stats
-
-
-# ── Fin du gestionnaire de données ──────────────────────────────────────────
-
-# =====================================================
-# IMPORTS IA (avec gestion d'absence gracieuse)
-# =====================================================
-try:
-    import google.generativeai as genai
-    GEMINI_AVAILABLE = True
-except ImportError:
-    GEMINI_AVAILABLE = False
-
-try:
-    import requests as req_lib
-    REQUESTS_AVAILABLE = True
-except ImportError:
-    REQUESTS_AVAILABLE = False
-
-# =====================================================
-# CONFIGURATION GÉNÉRALE
-# =====================================================
-st.set_page_config(
-    page_title="ApiTrack Pro",
-    page_icon="🐝",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# ─── Clés API (à configurer dans .streamlit/secrets.toml OU variable d'env) ───
-# Gratuit : https://aistudio.google.com/apikey  → 15 req/min, 1M tokens/jour
-GEMINI_API_KEY  = st.secrets.get("GEMINI_API_KEY",  os.getenv("GEMINI_API_KEY",  ""))
-# Gratuit : https://console.groq.com/keys       → 30 req/min, vision LLaMA
-GROQ_API_KEY    = st.secrets.get("GROQ_API_KEY",    os.getenv("GROQ_API_KEY",    ""))
-# Local 100% gratuit : http://localhost:11434 (ollama pull llava)
-OLLAMA_BASE_URL = st.secrets.get("OLLAMA_BASE_URL",  os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"))
-OLLAMA_MODEL    = st.secrets.get("OLLAMA_MODEL",     os.getenv("OLLAMA_MODEL",    "llava:7b"))
-
-# =====================================================
-# PROMPT IA MORPHOMÉTRIE ULTRA-SCIENTIFIQUE
-# =====================================================
-PROMPT_MORPHO = """Tu es un expert mondial en morphométrie des abeilles (Apis mellifera).
-Analyse cette image selon le protocole Ruttner (1988) et Kandemir (2011).
-
-RÉPONDS UNIQUEMENT EN JSON VALIDE, sans backticks, sans texte hors JSON :
-
-{
-  "qualite_image": "bonne|moyenne|insuffisante",
-  "type_specimen": "ouvrière|reine|faux-bourdon|indéterminé",
-  "mesures": {
-    "L_aile_mm": 9.2,
-    "B_aile_mm": 3.2,
-    "Ri": 2.45,
-    "DI3_mm": 1.72,
-    "OI": "-",
-    "A4_deg": 99.2,
-    "B4_deg": 91.5,
-    "Ti_L_mm": 3.01,
-    "Ba_L_mm": 1.88,
-    "Ba_W_mm": 1.09,
-    "Fe_L_mm": 2.75,
-    "T3_L_mm": 4.78,
-    "T4_L_mm": 4.65,
-    "T4_W_pct": 37,
-    "S4_L_mm": 2.72,
-    "Glossa_mm": 6.12,
-    "Wt_mm": 4.12,
-    "Pigment": 5,
-    "Hb_mm": 0.38
-  },
-  "integrite_ailes": "intactes|légèrement usées|usées|endommagées",
-  "nervation": "normale|atypique",
-  "classification": {
-    "taxon": "Apis mellifera intermissa",
-    "confiance_pct": 88,
-    "probabilites": {
-      "A. m. intermissa": 88,
-      "A. m. sahariensis": 7,
-      "A. m. ligustica": 3,
-      "A. m. carnica": 1,
-      "Hybride": 1
-    }
-  },
-  "caracterisation_langue": {
-    "classe": "courte|moyenne|longue",
-    "adaptation": "corolles courtes|corolles moyennes|corolles profondes",
-    "plantes_cibles": ["Romarin", "Jujubier"],
-    "avantage": "description 1 phrase"
-  },
-  "profil_productif": {
-    "specialisation": "miel|pollen|gelée_royale|polyvalent",
-    "score_miel": 75,
-    "score_pollen": 60,
-    "score_gelee_royale": 35,
-    "score_propolis": 45,
-    "justification": "1 phrase scientifique"
-  },
-  "resistance_varroa": {
-    "score_vsh_estime": 70,
-    "comportement_hygienique": "élevé|moyen|faible",
-    "recommandation": "1 phrase"
-  },
-  "diagnostic_sanitaire": {
-    "etat": "sain|suspect|malade",
-    "anomalies": [],
-    "pathologies_suspectees": [],
-    "deformations_varroa": false,
-    "ailes_ok": true,
-    "thorax_ok": true,
-    "abdomen_ok": true,
-    "notes": ""
-  },
-  "interpretation": "Texte scientifique complet 3-4 phrases citant caractères clés et références.",
-  "recommandations": ["recommandation 1", "recommandation 2"]
-}
-
-Si l'image ne montre pas clairement une abeille, mets qualite_image='insuffisante' et des valeurs estimées."""
-
-PROMPT_DIAGNOSTIC = """Tu es un vétérinaire apicole expert spécialisé en pathologies d'Apis mellifera.
-Analyse cette photo de {photo_type} prise en {saison}.{symptomes_line}
-
-RÉPONDS UNIQUEMENT EN JSON VALIDE :
-
-{{
-  "verdict": {{
-    "etat": "sain|vigilance|malade|critique",
-    "score_sante": 80,
-    "resume": "1-2 phrases"
-  }},
-  "observations": ["observation précise 1", "observation 2"],
-  "maladies_detectees": [
-    {{
-      "nom": "nom maladie",
-      "agent": "agent pathogène",
-      "probabilite": "haute|modérée|faible",
-      "signes": "description signes observés",
-      "gravite": "légère|modérée|sévère|critique",
-      "traitement": "traitement recommandé",
-      "urgence": "immédiate|sous 48h|sous 1 semaine|surveillance"
-    }}
-  ],
-  "parasites": [
-    {{
-      "nom": "Varroa destructor",
-      "confirme": true,
-      "niveau": "faible|modéré|élevé|très élevé",
-      "taux_estime": "~2%",
-      "action": "action recommandée"
-    }}
-  ],
-  "anomalies": ["anomalie structurelle observée"],
-  "points_positifs": ["point positif"],
-  "plan_action": [
-    {{"priorite": 1, "action": "action urgente", "delai": "immédiatement"}}
-  ],
-  "suivi": "fréquence suivi recommandé"
-}}"""
-
-# =====================================================
-# MODULE IA — GRATUIT & PERMANENT
-# =====================================================
-
-def image_to_base64(image: Image.Image, quality: int = 85) -> str:
-    """Convertit PIL Image en base64 JPEG."""
-    buf = io.BytesIO()
-    if image.mode in ("RGBA","P","LA"):
-        image = image.convert("RGB")
-    image.save(buf, format="JPEG", quality=quality)
-    return base64.b64encode(buf.getvalue()).decode("utf-8")
-
-def image_to_bytes(image: Image.Image) -> bytes:
-    """Convertit PIL Image en bytes JPEG."""
-    buf = io.BytesIO()
-    if image.mode in ("RGBA","P","LA"):
-        image = image.convert("RGB")
-    image.save(buf, format="JPEG", quality=90)
-    return buf.getvalue()
-
-def parse_json_response(text: str) -> dict:
-    """Parse JSON depuis réponse IA (robuste)."""
-    text = text.strip()
-    # Supprimer les backticks markdown
-    text = re.sub(r"```json\s*", "", text)
-    text = re.sub(r"```\s*", "", text)
-    text = text.strip()
-    # Trouver le JSON
-    start = text.find("{")
-    end = text.rfind("}") + 1
-    if start >= 0 and end > start:
-        text = text[start:end]
-    try:
-        return json.loads(text)
-    except:
-        # Tentative de réparation basique
-        text = re.sub(r",\s*}", "}", text)
-        text = re.sub(r",\s*\]", "]", text)
-        try:
-            return json.loads(text)
-        except:
-            return {"error": "Parse JSON échoué", "raw": text[:300]}
-
-# ─── 1. GOOGLE GEMINI (Gratuit : 15 req/min, 1M tokens/jour) ─────────────────
-def analyze_with_gemini(image: Image.Image, prompt: str) -> dict:
-    """
-    Google Gemini 2.0 Flash — GRATUIT
-    Obtenir une clé API : https://aistudio.google.com/apikey
-    Limites : 15 req/min, 1M tokens/jour, 1500 req/jour
-    """
-    if not GEMINI_AVAILABLE:
-        return {"error": "google-generativeai non installé. pip install google-generativeai"}
-    if not GEMINI_API_KEY:
-        return {"error": "GEMINI_API_KEY non configurée. Obtenez une clé GRATUITE sur https://aistudio.google.com/apikey"}
-    try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-2.0-flash-exp")
-        img_part = {"mime_type": "image/jpeg", "data": image_to_base64(image)}
-        response = model.generate_content([prompt, img_part])
-        return parse_json_response(response.text)
-    except Exception as e:
-        err = str(e)
-        if "quota" in err.lower() or "429" in err:
-            return {"error": "Quota Gemini atteint. Réessayez dans 1 minute (limite : 15 req/min gratuit)."}
-        return {"error": f"Gemini: {err}"}
-
-# ─── 2. OLLAMA LOCAL (100% Gratuit, Illimité, Hors ligne) ────────────────────
-def analyze_with_ollama(image: Image.Image, prompt: str) -> dict:
-    """
-    Ollama — 100% LOCAL, GRATUIT, ILLIMITÉ, SANS INTERNET
-    Installation : https://ollama.com/download
-    Modèle : ollama pull llava:7b  (ou llava:13b pour plus de précision)
-    Démarrage : ollama serve
-    """
-    if not REQUESTS_AVAILABLE:
-        return {"error": "requests non installé."}
-    try:
-        # Vérifier si Ollama est disponible
-        health = req_lib.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=3)
-        if health.status_code != 200:
-            return {"error": f"Ollama non disponible sur {OLLAMA_BASE_URL}. Démarrez 'ollama serve'."}
-        
-        payload = {
-            "model": OLLAMA_MODEL,
-            "prompt": prompt,
-            "images": [image_to_base64(image)],
-            "stream": False,
-            "options": {"temperature": 0.1, "num_predict": 2000}
-        }
-        response = req_lib.post(f"{OLLAMA_BASE_URL}/api/generate", json=payload, timeout=120)
-        data = response.json()
-        return parse_json_response(data.get("response", ""))
-    except req_lib.exceptions.ConnectionError:
-        return {"error": f"Ollama non accessible ({OLLAMA_BASE_URL}). Lancez 'ollama serve' dans un terminal."}
-    except Exception as e:
-        return {"error": f"Ollama: {str(e)}"}
-
-# ─── 3. GROQ + LLaMA 3.2 Vision (Gratuit : 30 req/min) ──────────────────────
-def analyze_with_groq(image: Image.Image, prompt: str) -> dict:
-    """
-    Groq Cloud — GRATUIT (30 req/min, vision avec LLaMA 3.2)
-    Clé API GRATUITE : https://console.groq.com/keys
-    """
-    if not REQUESTS_AVAILABLE:
-        return {"error": "requests non installé."}
-    if not GROQ_API_KEY:
-        return {"error": "GROQ_API_KEY non configurée. Obtenez une clé GRATUITE sur https://console.groq.com/keys"}
-    try:
-        headers = {
-            "Authorization": f"Bearer {GROQ_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": "llama-3.2-11b-vision-preview",
-            "messages": [{
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image_url", "image_url": {
-                        "url": f"data:image/jpeg;base64,{image_to_base64(image)}"
-                    }}
-                ]
-            }],
-            "max_tokens": 2048,
-            "temperature": 0.1
-        }
-        resp = req_lib.post("https://api.groq.com/openai/v1/chat/completions",
-                            headers=headers, json=payload, timeout=60)
-        data = resp.json()
-        if "error" in data:
-            return {"error": f"Groq: {data['error'].get('message', str(data['error']))}"}
-        text = data["choices"][0]["message"]["content"]
-        return parse_json_response(text)
-    except Exception as e:
-        return {"error": f"Groq: {str(e)}"}
-
-# ─── 4. FALLBACK INTELLIGENT (essaie dans l'ordre de disponibilité) ───────────
-def analyze_auto(image: Image.Image, prompt: str, preference: str = "auto") -> tuple[dict, str]:
-    """
-    Système de fallback intelligent.
-    Retourne (résultat, source_utilisée)
-    Ordre par défaut : Gemini → Groq → Ollama
-    """
-    sources = {
-        "gemini": ("Google Gemini 2.0 Flash (gratuit)", analyze_with_gemini),
-        "groq":   ("Groq LLaMA Vision (gratuit)",       analyze_with_groq),
-        "ollama": ("Ollama local (gratuit, hors ligne)", analyze_with_ollama),
-    }
-    
-    if preference != "auto" and preference in sources:
-        name, fn = sources[preference]
-        result = fn(image, prompt)
-        if "error" not in result:
-            return result, name
-        return result, name
-    
-    # Auto : tester dans l'ordre
-    order = ["gemini", "groq", "ollama"]
-    last_error = {}
-    for key in order:
-        name, fn = sources[key]
-        result = fn(image, prompt)
-        if "error" not in result:
-            return result, name
-        last_error = result
-    
-    return {"error": f"Tous les services IA ont échoué. Dernier: {last_error.get('error','')}"}, "Aucun"
-
-# =====================================================
-# CSS ULTRA-PROFESSIONNEL
-# =====================================================
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
-
-:root {
-    --honey:#C97A08; --honey-l:#F2C14E; --honey-pale:#FFF8E6; --honey-dark:#7A4800;
-    --forest:#1C3D10; --forest-mid:#2D5E1E; --forest-l:#5A8E40; --forest-pale:#EAF3E4;
-    --wax:#F2E8CC; --wax-mid:#E0CFA0; --wax-dark:#B89E6A;
-    --earth:#3E2A18; --cream:#FDFAF3; --night:#131308;
-    --text:#1C180C; --muted:#655E40;
-    --pollen:#E8A020; --royal:#7C3AED; --royal-l:#EDE9FE;
-    --teal:#0D9488; --teal-l:#CCFBF1;
-}
-html,body,[class*="css"]{font-family:'DM Sans',sans-serif;color:var(--text);}
-#MainMenu,footer,header{visibility:hidden;}
-.block-container{padding-top:1.5rem;padding-bottom:2rem;max-width:1440px;}
-
-[data-testid="stSidebar"]{
-    background:linear-gradient(180deg,#0F1F08 0%,#1C3D10 40%,#142B0A 100%);
-    border-right:1px solid rgba(210,170,60,0.18);
-}
-[data-testid="stSidebar"] *{color:rgba(255,255,255,0.82) !important;}
-[data-testid="stSidebar"] hr{border-color:rgba(255,255,255,0.08) !important;}
-
-/* Metric */
-[data-testid="stMetric"]{
-    background:white; border-radius:18px; padding:20px 22px;
-    border:1px solid rgba(180,150,80,0.18);
-    box-shadow:0 2px 14px rgba(60,40,10,0.07);
-    transition:box-shadow .2s,transform .2s;
-}
-[data-testid="stMetric"]:hover{box-shadow:0 6px 28px rgba(60,40,10,0.13);transform:translateY(-2px);}
-[data-testid="stMetricLabel"]{font-size:10.5px!important;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)!important;font-weight:600;}
-[data-testid="stMetricValue"]{font-family:'Playfair Display',serif!important;font-size:2rem!important;color:var(--text)!important;}
-
-/* Tabs */
-[data-testid="stTabs"] [data-baseweb="tab-list"]{background:#F2E8CC;border-radius:14px;padding:4px;gap:4px;}
-[data-testid="stTabs"] [data-baseweb="tab"]{border-radius:10px;font-size:12.5px;font-weight:500;color:var(--muted);background:transparent;border:none;padding:8px 16px;transition:all .15s;}
-[data-testid="stTabs"] [aria-selected="true"]{background:white!important;color:var(--text)!important;box-shadow:0 1px 5px rgba(0,0,0,.11)!important;}
-
-/* Buttons */
-.stButton>button{border-radius:11px;font-family:'DM Sans',sans-serif;font-weight:500;font-size:13px;transition:all .15s;}
-.stButton>button[kind="primary"]{background:linear-gradient(135deg,#C97A08,#7A4800);color:white;border:none;}
-.stButton>button:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(80,50,10,0.15);}
-
-/* Inputs */
-.stTextInput>div>div>input,.stNumberInput>div>div>input,
-.stSelectbox>div>div,.stTextArea>div>div>textarea{
-    border-radius:10px!important;border:1.5px solid rgba(180,150,80,0.38)!important;
-    font-family:'DM Sans',sans-serif!important;font-size:13.5px!important;background:white!important;
-}
-
-/* Custom cards */
-.api-card{
-    background:white;border-radius:16px;padding:18px 20px;
-    border:1px solid rgba(180,150,80,0.2);
-    box-shadow:0 2px 12px rgba(60,40,10,0.07);
-    margin-bottom:12px;transition:all .2s;
-}
-.api-card:hover{box-shadow:0 6px 24px rgba(60,40,10,0.12);}
-.api-card-gemini{border-left:4px solid #4285F4;}
-.api-card-ollama{border-left:4px solid #22c55e;}
-.api-card-groq{border-left:4px solid #f97316;}
-
-.morph-result-card{
-    background:white;border-radius:18px;padding:22px;
-    border:2px solid var(--honey);
-    box-shadow:0 4px 24px rgba(201,122,8,.15);
-}
-.measure-row{
-    display:flex;align-items:center;justify-content:space-between;
-    padding:7px 0;border-bottom:1px solid rgba(180,150,80,0.12);
-    font-size:12.5px;
-}
-.measure-row:last-child{border-bottom:none;}
-.mval{font-family:'JetBrains Mono',monospace;font-size:12px;padding:3px 8px;border-radius:6px;}
-.mval-ok{background:#dcfce7;color:#15803d;}
-.mval-warn{background:#fef9c3;color:#a16207;}
-.mval-bad{background:#fee2e2;color:#b91c1c;}
-
-.prod-profile-grid{
-    display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0;
-}
-.pp-item{
-    text-align:center;padding:12px 6px;border-radius:12px;
-    background:var(--cream);border:1px solid rgba(180,150,80,0.15);
-}
-.pp-score{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;line-height:1;}
-.pp-label{font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:3px;}
-
-.langue-bar{height:11px;background:var(--wax);border-radius:6px;overflow:hidden;margin:8px 0;}
-.langue-fill{height:100%;border-radius:6px;background:linear-gradient(90deg,#86efac,#22c55e,var(--honey));}
-
-.alert-box{padding:13px 16px;border-radius:12px;margin-bottom:10px;font-size:13px;display:flex;align-items:flex-start;gap:11px;line-height:1.6;}
-.al-danger{background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-left:4px solid #ef4444;}
-.al-warning{background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-left:4px solid #f59e0b;}
-.al-success{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;border-left:4px solid #22c55e;}
-.al-info{background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;border-left:4px solid #3b82f6;}
-.al-royal{background:#faf5ff;border:1px solid #e9d5ff;color:#6b21a8;border-left:4px solid #9333ea;}
-
-.section-title{
-    font-family:'Playfair Display',serif;font-size:20px;font-weight:700;
-    color:var(--earth);margin-bottom:4px;padding-bottom:7px;
-    border-bottom:2px solid rgba(201,122,8,0.18);
-}
-.page-title{font-family:'Playfair Display',serif;font-size:30px;font-weight:700;color:var(--earth);margin-bottom:3px;}
-.page-sub{font-size:13.5px;color:var(--muted);margin-bottom:24px;}
-
-.badge{display:inline-block;padding:3px 11px;border-radius:20px;font-size:10.5px;font-weight:600;letter-spacing:.04em;}
-.b-green{background:#dcfce7;color:#15803d;} .b-amber{background:#fef9c3;color:#a16207;}
-.b-orange{background:#ffedd5;color:#c2410c;} .b-red{background:#fee2e2;color:#b91c1c;}
-.b-blue{background:#dbeafe;color:#1d4ed8;} .b-purple{background:#f3e8ff;color:#7e22ce;}
-.b-teal{background:#ccfbf1;color:#0d9488;} .b-gray{background:#f1f5f9;color:#475569;}
-
-.ruche-card{
-    background:white;border-radius:18px;padding:20px;
-    border:1px solid rgba(180,150,80,0.2);cursor:pointer;
-    transition:all .2s;height:100%;
-}
-.ruche-card:hover{box-shadow:0 8px 28px rgba(80,50,10,0.12);transform:translateY(-3px);border-color:var(--honey);}
-
-.status-dot{width:10px;height:10px;border-radius:50%;display:inline-block;}
-.s-excellent{background:#22c55e;box-shadow:0 0 0 3px #22c55e22;}
-.s-bon{background:var(--honey);box-shadow:0 0 0 3px var(--honey-pale);}
-.s-attention{background:#f97316;box-shadow:0 0 0 3px #ffedd5;}
-.s-critique{background:#ef4444;box-shadow:0 0 0 3px #fee2e2;}
-
-/* Source badge IA */
-.ia-source{
-    display:inline-flex;align-items:center;gap:6px;
-    padding:5px 14px;border-radius:20px;font-size:11.5px;font-weight:600;
-    margin-bottom:14px;
-}
-.ia-gemini{background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE;}
-.ia-ollama{background:#F0FDF4;color:#15803D;border:1px solid #BBF7D0;}
-.ia-groq{background:#FFF7ED;color:#C2410C;border:1px solid #FED7AA;}
-</style>
-""", unsafe_allow_html=True)
-
-# =====================================================
-# HELPERS VISUELS
-# =====================================================
-def alert(icon, text, cls="al-info"):
-    return f'<div class="alert-box {cls}"><span style="font-size:18px">{icon}</span><div>{text}</div></div>'
-
-def section_header(title):
-    st.markdown(f'<div class="section-title">{title}</div>', unsafe_allow_html=True)
-
-def ruche_card_html(r):
-    dot = {"Excellent":"s-excellent","Bon":"s-bon","Attention":"s-attention","Critique":"s-critique"}.get(r["Statut"],"s-bon")
-    pi = {"Miel":"🍯","Pollen":"🌿","Gelée Royale":"👑","Résistance":"🛡️"}.get(r["Profil_prod"],"🐝")
-    race_cls = {"A. m. intermissa":"b-amber","A. m. sahariensis":"b-purple","A. m. ligustica":"b-blue","A. m. carnica":"b-green","Hybride":"b-teal"}.get(r["Race"],"b-gray")
-    return f"""<div class="ruche-card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;background:var(--wax);padding:3px 8px;border-radius:6px;color:var(--muted)">{r["ID"]}</span>
-      <div style="display:flex;align-items:center;gap:7px"><span title="{r['Profil_prod']}">{pi}</span>
-        <div class="status-dot {dot}"></div></div>
-    </div>
-    <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:700;margin-bottom:3px">{r["Nom"]}</div>
-    <div style="margin-bottom:11px"><span class="badge {race_cls}" style="font-size:10px">{r["Race"][:18]}</span></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
-      <div style="background:var(--honey-pale);border-radius:9px;padding:8px">
-        <div style="font-weight:600;font-size:13.5px;color:var(--honey-dark)">{r["Poids_kg"]} kg</div>
-        <div style="font-size:9.5px;text-transform:uppercase;color:var(--muted)">Poids</div></div>
-      <div style="background:var(--honey-pale);border-radius:9px;padding:8px">
-        <div style="font-weight:600;font-size:13.5px;color:var(--honey-dark)">{r["Varroa_pct"]}%</div>
-        <div style="font-size:9.5px;text-transform:uppercase;color:var(--muted)">Varroa</div></div>
-      <div style="background:var(--honey-pale);border-radius:9px;padding:8px">
-        <div style="font-weight:600;font-size:13.5px;color:var(--honey-dark)">{r["Miel_kg"]} kg</div>
-        <div style="font-size:9.5px;text-transform:uppercase;color:var(--muted)">🍯 Miel</div></div>
-      <div style="background:var(--honey-pale);border-radius:9px;padding:8px">
-        <div style="font-weight:600;font-size:12px;color:var(--honey-dark)">{r["Pollen_kg"]}kg/{r["Gelée_g"]}g</div>
-        <div style="font-size:9.5px;text-transform:uppercase;color:var(--muted)">🌿/{chr(128081)}</div></div>
-    </div>
-    <div style="margin-top:9px;font-size:11px;color:var(--muted)">📍 {r["Site"]}</div>
-    </div>"""
-
-def production_radar(r):
-    cats = ["Miel","Pollen","Gelée R.","VSH","Douceur","Éco.hiv."]
-    vals = [min(r["Miel_kg"]/20*100,100), min(r["Pollen_kg"]/5*100,100),
-            min(r["Gelée_g"]/200*100,100), r["VSH_pct"], r["Douceur"], r["Economie_hiv"]]
-    fig = go.Figure(go.Scatterpolar(
-        r=vals+[vals[0]], theta=cats+[cats[0]], fill='toself',
-        fillcolor='rgba(201,122,8,0.12)', line=dict(color='#C97A08',width=2.2)))
-    fig.update_layout(polar=dict(
-        bgcolor='rgba(253,250,243,0.5)',
-        radialaxis=dict(visible=True,range=[0,100],tickfont=dict(size=8,color='#655E40'),
-                        gridcolor='rgba(180,150,80,0.18)'),
-        angularaxis=dict(tickfont=dict(size=10,color='#3E2A18'))),
-        showlegend=False,height=280,margin=dict(l=28,r=28,t=28,b=28),
-        paper_bgcolor='rgba(0,0,0,0)')
-    return fig
-
-# =====================================================
-# CHARGEMENT PERSISTANT DES DONNÉES
-# Données dans apitrack_data/ — survivent à l'extinction PC/smartphone
-# =====================================================
-
-def init_state():
-    if st.session_state.get("_data_loaded"):
-        return
-    all_data = load_all()
-    st.session_state.ruches         = all_data["ruches"]
-    st.session_state.inspections    = all_data["inspections"]
-    st.session_state.recoltes       = all_data["recoltes"]
-    st.session_state.traitements    = all_data["traitements"]
-    st.session_state.morph_analyses = all_data["morpho_analyses"]
-    st.session_state.stock          = all_data["stock"]
-    st.session_state.genetique      = all_data["genetique"]
-    st.session_state.alertes_db     = all_data["alertes"]
-    st.session_state._data_loaded   = True
-    st.session_state._config        = load_config()
-
-def save_state():
-    save_all({
-        "ruches":          st.session_state.get("ruches", pd.DataFrame()),
-        "inspections":     st.session_state.get("inspections", pd.DataFrame()),
-        "recoltes":        st.session_state.get("recoltes", pd.DataFrame()),
-        "traitements":     st.session_state.get("traitements", pd.DataFrame()),
-        "morpho_analyses": st.session_state.get("morph_analyses", pd.DataFrame()),
-        "stock":           st.session_state.get("stock", pd.DataFrame()),
-        "genetique":       st.session_state.get("genetique", pd.DataFrame()),
-        "alertes":         st.session_state.get("alertes_db", pd.DataFrame()),
-    })
-
-def reload_state():
-    st.session_state["_data_loaded"] = False
-    init_state()
-
-def auto_backup_if_needed():
-    cfg = load_config()
-    last = cfg.get("derniere_sauvegarde", "")
-    if not last:
-        create_backup("auto"); return
-    try:
-        last_dt = datetime.fromisoformat(last)
-        if (datetime.now() - last_dt).days >= 1:
-            create_backup("auto")
-    except:
-        create_backup("auto")
-
-init_state()
-auto_backup_if_needed()
-
-# =====================================================
-# CLASSIFICATION LOCALE (sans IA, instantanée)
-# =====================================================
-def classify_local(L, Ri, Ac, Pv, Tom, Ti):
-    """Classification morphométrique locale selon Ruttner (1988)."""
-    scores = {"A. m. intermissa":0,"A. m. sahariensis":0,"A. m. ligustica":0,"A. m. carnica":0}
-    # Longueur aile
-    if 8.9<=L<=9.6: scores["A. m. intermissa"]+=22
-    if 8.7<=L<=9.3: scores["A. m. sahariensis"]+=22
-    if 9.1<=L<=9.8: scores["A. m. ligustica"]+=18; scores["A. m. carnica"]+=18
-    # Indice cubital
-    if 2.0<=Ri<=2.8: scores["A. m. intermissa"]+=25
-    if 2.1<=Ri<=2.9: scores["A. m. sahariensis"]+=22
-    if 2.4<=Ri<=3.2: scores["A. m. ligustica"]+=25
-    if 2.6<=Ri<=3.5: scores["A. m. carnica"]+=25
-    # Glossa
-    if 5.9<=Ac<=6.3: scores["A. m. intermissa"]+=28
-    if 5.8<=Ac<=6.2: scores["A. m. sahariensis"]+=25
-    if 6.3<=Ac<=6.7: scores["A. m. ligustica"]+=28
-    if 6.4<=Ac<=6.8: scores["A. m. carnica"]+=28
-    # Pigmentation
-    if 4<=Pv<=7: scores["A. m. intermissa"]+=15
-    if 5<=Pv<=8: scores["A. m. sahariensis"]+=15
-    if 1<=Pv<=3: scores["A. m. ligustica"]+=15; scores["A. m. carnica"]+=15
-    # Tomentum
-    if 30<=Tom<=45: scores["A. m. intermissa"]+=10
-    if 25<=Tom<=40: scores["A. m. sahariensis"]+=8
-    if 45<=Tom<=60: scores["A. m. ligustica"]+=12
-    if 35<=Tom<=50: scores["A. m. carnica"]+=10
-    total = sum(scores.values()) or 1
-    probs = {k:v/total*100 for k,v in scores.items()}
-    best = max(probs, key=probs.get)
-    if probs[best] < 38: best = "Hybride"; probs["Hybride"] = 100-sum(probs.values())
-    conf = probs.get(best, 50)
-    return best, conf, probs
-
-# =====================================================
-# SIDEBAR
-# =====================================================
+# ─────────────────────────────────────────────
+# SIDEBAR (avec nouvel onglet "Cartographie")
+# ─────────────────────────────────────────────
 with st.sidebar:
-    # Status IA compact
-    ia_status = []
-    if GEMINI_API_KEY: ia_status.append("🟢 Gemini")
-    if GROQ_API_KEY:   ia_status.append("🟢 Groq")
-    ia_status.append("⚪ Ollama")
-
     st.markdown(f"""
-    <div style="padding:18px 4px 16px">
-      <div style="background:linear-gradient(135deg,#C97A08,#7A4800);border-radius:14px;
-                  width:50px;height:50px;display:flex;align-items:center;justify-content:center;
-                  font-size:26px;margin-bottom:11px">🐝</div>
-      <div style="font-family:'Playfair Display',serif;font-size:19px;font-weight:700;color:#F2C14E;line-height:1.1">ApiTrack Pro</div>
-      <div style="font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,0.38);margin-top:3px">Plateforme Apicole v3.0</div>
-      <div style="margin-top:10px;font-size:11px;color:rgba(255,255,255,0.55)">IA : {" · ".join(ia_status)}</div>
-    </div><hr>
+    <div style="padding:16px 0 20px">
+        <div style="background:linear-gradient(135deg,#D4820A,#8B5200);border-radius:14px;
+                    width:52px;height:52px;display:flex;align-items:center;justify-content:center;
+                    font-size:26px;margin-bottom:12px">🐝</div>
+        <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;
+                    color:#F5C842;line-height:1.1">ApiTrack Pro</div>
+        <div style="font-size:10px;letter-spacing:0.14em;text-transform:uppercase;
+                    color:rgba(255,255,255,0.45);margin-top:3px">Plateforme Apicole v2.0</div>
+    </div>
+    <hr>
     """, unsafe_allow_html=True)
 
     pages = {
@@ -1291,1157 +21,1747 @@ with st.sidebar:
         "🔍 Inspections": "inspections",
         "💊 Traitements": "traitements",
         "🍯 Miel": "miel",
-        "🌿 Pollen": "pollen",
+        "🌼 Pollen": "pollen",
         "👑 Gelée Royale": "gelee",
-        "🟤 Propolis & Cire": "propolis",
-        "📦 Inventaire": "inventaire",
-        "────────────────": "sep1",
-        "🔬 Morphométrie IA": "morphometrie",
+        "🔬 Morphométrie": "morphometrie",
         "🧬 Génétique & Races": "genetique",
-        "📐 Caractérisation": "caracterisation",
-        "────────────────": "sep2",
+        "📈 Caractérisation": "caracterisation",
+        "🗺️ Cartographie": "carte",
         "🌸 Flore Mellifère": "flore",
         "🌤️ Météo & Miellée": "meteo",
         "📋 Rapports": "rapports",
-        "💾 Données & Sauvegardes": "donnees",
         "🚨 Alertes": "alertes",
-        "⚙️ Configuration IA": "config_ia",
+        "💾 Administration": "admin",
     }
 
-    nav_labels = [k for k in pages if not k.startswith("───")]
-    selected = st.radio("Nav", nav_labels, label_visibility="collapsed")
-    current_page = pages[selected]
+    selected_label = st.radio("Navigation", list(pages.keys()), label_visibility="collapsed")
+    current_page = pages[selected_label]
 
     st.markdown("<hr>", unsafe_allow_html=True)
-    df_s = st.session_state.ruches
+    nb_ruches = len(st.session_state.data["ruches"])
+    nb_alertes = len(st.session_state.data["ruches"][st.session_state.data["ruches"]["Statut"].isin(["Critique","Attention"])])
     st.markdown(f"""
-    <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:13px 15px;font-size:12px">
-      <div style="color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.1em;font-size:9.5px;margin-bottom:8px">Aperçu rapide</div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:5px"><span>🏠 Ruches</span><strong style="color:#F2C14E">{len(df_s)}</strong></div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:5px"><span>🍯 Miel total</span><strong style="color:#F2C14E">{df_s["Miel_kg"].sum():.0f} kg</strong></div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:5px"><span>🌿 Pollen</span><strong style="color:#F2C14E">{df_s["Pollen_kg"].sum():.1f} kg</strong></div>
-      <div style="display:flex;justify-content:space-between"><span>🔬 Analyses</span><strong style="color:#F2C14E">{len(st.session_state.morph_analyses)}</strong></div>
-    </div>
-    <div style="margin-top:14px;display:flex;align-items:center;gap:9px">
-      <div style="width:34px;height:34px;background:linear-gradient(135deg,#F2C14E,#C97A08);border-radius:50%;
-                  display:flex;align-items:center;justify-content:center;font-weight:700;color:#1C3D10;font-size:13px">MA</div>
-      <div><div style="font-size:13px;font-weight:500">Mohammed A.</div>
-        <div style="font-size:10.5px;color:rgba(255,255,255,0.38)">Apiculteur professionnel</div></div>
+    <div style="background:rgba(255,255,255,0.06);border-radius:12px;padding:14px 16px;font-size:12px">
+        <div style="color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.1em;
+                    font-size:10px;margin-bottom:8px">Aperçu rapide</div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span style="color:rgba(255,255,255,0.7)">🏠 Ruches actives</span>
+            <strong style="color:#F5C842">{nb_ruches}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span style="color:rgba(255,255,255,0.7)">🚨 Alertes</span>
+            <strong style="color:#ef4444">{nb_alertes}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between">
+            <span style="color:rgba(255,255,255,0.7)">🍯 Total miel</span>
+            <strong style="color:#F5C842">{st.session_state.data['ruches']['Miel_kg'].sum():.0f} kg</strong>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
-# =====================================================
-# ══════════════════════════════════════════════════
-#  PAGE : MORPHOMÉTRIE IA (CŒUR DE L'AMÉLIORATION)
-# ══════════════════════════════════════════════════
-# =====================================================
-if current_page == "morphometrie":
-    st.markdown('<div class="page-title">🔬 Morphométrie IA — Gratuite & Permanente</div>', unsafe_allow_html=True)
-    st.markdown('<div class="page-sub">Analyse automatique par photo · 19 caractères Ruttner · Profil productif · Classification raciale · 100% gratuit</div>', unsafe_allow_html=True)
+    st.markdown(f"""
+    <div style="margin-top:auto;padding-top:20px;display:flex;align-items:center;gap:10px">
+        <div style="width:36px;height:36px;background:#D4820A;border-radius:50%;
+                    display:flex;align-items:center;justify-content:center;font-weight:700;
+                    color:#2D4A1E;font-size:14px;flex-shrink:0">{st.session_state.apiculteur[0] if st.session_state.apiculteur else 'A'}</div>
+        <div>
+            <div style="font-size:13px;color:rgba(255,255,255,0.85);font-weight:500">{st.session_state.apiculteur}</div>
+            <div style="font-size:11px;color:rgba(255,255,255,0.4)">Apiculteur professionnel</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # ── Statut des IA disponibles ──
-    col_s1, col_s2, col_s3 = st.columns(3)
-    with col_s1:
-        gemini_ok = bool(GEMINI_API_KEY) and GEMINI_AVAILABLE
-        st.markdown(f"""<div class="api-card api-card-gemini">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start">
-            <div><div style="font-weight:700;font-size:13.5px;color:#1D4ED8">🤖 Google Gemini 2.0 Flash</div>
-              <div style="font-size:11.5px;color:var(--muted);margin-top:3px">15 req/min · 1M tokens/jour · Vision ✅</div></div>
-            <span class="badge {'b-green' if gemini_ok else 'b-red'}">{'✓ Actif' if gemini_ok else '✗ Clé manquante'}</span>
-          </div>
-          <div style="font-size:11px;color:var(--muted);margin-top:8px">🔗 aistudio.google.com/apikey — 100% gratuit</div>
-        </div>""", unsafe_allow_html=True)
-    with col_s2:
-        groq_ok = bool(GROQ_API_KEY)
-        st.markdown(f"""<div class="api-card api-card-groq">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start">
-            <div><div style="font-weight:700;font-size:13.5px;color:#C2410C">⚡ Groq LLaMA 3.2 Vision</div>
-              <div style="font-size:11.5px;color:var(--muted);margin-top:3px">30 req/min · Vision ✅ · Ultra-rapide</div></div>
-            <span class="badge {'b-green' if groq_ok else 'b-amber'}">{'✓ Actif' if groq_ok else '⚪ Optionnel'}</span>
-          </div>
-          <div style="font-size:11px;color:var(--muted);margin-top:8px">🔗 console.groq.com/keys — 100% gratuit</div>
-        </div>""", unsafe_allow_html=True)
-    with col_s3:
-        st.markdown(f"""<div class="api-card api-card-ollama">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start">
-            <div><div style="font-weight:700;font-size:13.5px;color:#15803D">🖥️ Ollama Local (LLaVA)</div>
-              <div style="font-size:11.5px;color:var(--muted);margin-top:3px">Illimité · Hors ligne ✅ · Privé</div></div>
-            <span class="badge b-teal">🏠 Local</span>
-          </div>
-          <div style="font-size:11px;color:var(--muted);margin-top:8px">ollama.com · ollama pull llava:7b</div>
-        </div>""", unsafe_allow_html=True)
-
-    st.markdown("---")
-
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "📸 Analyse IA par photo",
-        "🏠 Diagnostic ruche/cadre",
-        "📐 Saisie manuelle",
-        "📐 Référentiel Ruttner",
-        "📊 Historique analyses"
-    ])
-
-    # ══════════════════════════════════════════════════
-    # ONGLET 1 : ANALYSE IA PAR PHOTO (CŒUR)
-    # ══════════════════════════════════════════════════
+# ─────────────────────────────────────────────
+# PAGE: ADMINISTRATION (corrigée sans erreur d'indentation)
+# ─────────────────────────────────────────────
+if current_page == "admin":
+    st.markdown('<div class="page-title">💾 Administration</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Sauvegarde, restauration, gestion des ruches et profil</div>', unsafe_allow_html=True)
+    
+    tab1, tab2, tab3, tab4 = st.tabs(["💾 Sauvegarde / Restauration", "🗑 Supprimer une ruche", "👤 Profil apiculteur", "🔐 Sécurité"])
+    
     with tab1:
-        st.markdown(alert("🤖", """<strong>Analyse IA automatique :</strong> Téléversez une photo d'abeille (vue ventrale idéale, 
-            microscope ou téléphone). L'IA effectue automatiquement les 19 mesures morphométriques selon Ruttner (1988), 
-            la classification raciale, le profil productif (miel/pollen/gelée), la caractérisation de la langue et des ailes, 
-            et l'estimation de la résistance VSH. <strong>Service 100% gratuit et permanent.</strong>""", "al-info"), unsafe_allow_html=True)
-
-        c_upload, c_config = st.columns([3, 1])
-        with c_config:
-            pref_ia = st.selectbox(
-                "Service IA préféré",
-                ["auto (recommandé)", "gemini", "groq", "ollama"],
-                help="Auto = essaie Gemini → Groq → Ollama automatiquement"
-            )
-            pref_ia_val = pref_ia.split(" ")[0]
-
-            ruche_pour_analyse = st.selectbox(
-                "Ruche à analyser",
-                ["Non spécifiée"] + [f"{r['ID']} — {r['Nom']}" for _,r in st.session_state.ruches.iterrows()]
-            )
-            analyste = st.text_input("Analyste", value="Mohammed A.", key="a_analyste")
-
-        with c_upload:
-            upload_mode = st.radio("Source image", ["📁 Téléverser un fichier", "📷 Caméra"], horizontal=True)
-            img_file = None
-            if upload_mode == "📁 Téléverser un fichier":
-                img_file = st.file_uploader("Photo abeille (vue ventrale idéale)", type=["jpg","jpeg","png","webp","bmp"],
-                    help="Vue ventrale sous loupe/microscope recommandée. Résolution min. 800px.")
-            else:
-                img_file = st.camera_input("Prenez une photo de l'abeille", key="morph_cam_tab")
-
-        if img_file:
-            image = Image.open(img_file).convert("RGB")
-
-            col_img, col_btn = st.columns([2,1])
-            with col_img:
-                st.image(image, caption="Image prête pour l'analyse", width=380)
-
-            with col_btn:
-                st.markdown("**🎯 Options d'amélioration image**")
-                do_enhance = st.checkbox("Améliorer contraste", value=True)
-                do_sharpen = st.checkbox("Accentuer les détails", value=True)
-                if do_enhance or do_sharpen:
-                    img_proc = image.copy()
-                    if do_enhance:
-                        img_proc = ImageEnhance.Contrast(img_proc).enhance(1.4)
-                        img_proc = ImageEnhance.Sharpness(img_proc).enhance(1.2)
-                    if do_sharpen:
-                        img_proc = img_proc.filter(ImageFilter.SHARPEN)
+        st.markdown("#### Sauvegarder la base de données")
+        if st.button("📥 Préparer le téléchargement de la base"):
+            with open(DB_PATH, "rb") as f:
+                st.download_button(
+                    label="Cliquez pour télécharger",
+                    data=f,
+                    file_name="apitrack_backup.db",
+                    mime="application/octet-stream"
+                )
+        st.markdown("#### Restaurer une base existante")
+        uploaded_file = st.file_uploader("Choisir un fichier .db", type=["db"])
+        if uploaded_file is not None:
+            if st.button("⚠️ Restaurer (remplace toutes les données)"):
+                with open(DB_PATH, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
+                st.success("Base restaurée ! Rechargez la page.")
+                st.rerun()
+    
+    with tab2:
+        st.markdown("#### Supprimer une ruche (et toutes ses données associées)")
+        ruche_list = st.session_state.data["ruches"]["ID"].tolist()
+        ruche_to_delete = st.selectbox("Choisir la ruche à supprimer", ruche_list)
+        if st.button("🗑 Supprimer définitivement", type="primary"):
+            delete_ruche(ruche_to_delete)
+            st.session_state.data = load_dataframes()
+            st.success(f"Ruche {ruche_to_delete} et ses enregistrements supprimés.")
+            st.rerun()
+    
+    with tab3:
+        st.markdown("#### Modifier le nom de l'apiculteur")
+        new_name = st.text_input("Nom de l'apiculteur", value=st.session_state.apiculteur)
+        if st.button("Enregistrer"):
+            set_setting("apiculteur", new_name)
+            st.session_state.apiculteur = new_name
+            st.success("Nom mis à jour")
+            st.rerun()
+    
+    with tab4:
+        st.markdown("#### Changer le mot de passe")
+        old_pwd = st.text_input("Ancien mot de passe", type="password")
+        new_pwd = st.text_input("Nouveau mot de passe", type="password")
+        confirm = st.text_input("Confirmer", type="password")
+        if st.button("Changer mot de passe"):
+            if "username" in st.session_state and verify_login(st.session_state.username, old_pwd):
+                if new_pwd == confirm and len(new_pwd) >= 4:
+                    change_password(st.session_state.username, new_pwd)
+                    st.success("Mot de passe modifié")
                 else:
-                    img_proc = image
+                    st.error("Le nouveau mot de passe doit faire au moins 4 caractères et correspondre.")
+            else:
+                st.error("Ancien mot de passe incorrect")
 
-                if not (gemini_ok or groq_ok):
-                    st.warning("⚠️ Aucune clé API configurée. Seul Ollama local sera tenté. Configurez une clé dans ⚙️ Configuration IA.")
+# ─────────────────────────────────────────────
+# PAGE: CARTE SATELLITE (Zones mellifères)
+# ─────────────────────────────────────────────
+elif current_page == "carte":
+    st.markdown('<div class="page-title">🗺️ Cartographie des zones mellifères</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Placez vos ruches selon la ressource disponible (miel, pollen, gelée royale, propolis)</div>', unsafe_allow_html=True)
 
-                btn_analyse = st.button("🔬 Lancer l'analyse IA", type="primary", use_container_width=True)
-                btn_demo   = st.button("🎭 Analyse démo (sans IA)", use_container_width=True,
-                                        help="Génère un résultat de démonstration sans appel IA")
+    try:
+        import folium
+        from streamlit_folium import st_folium
+    except ImportError:
+        st.error("Installez folium et streamlit-folium : pip install folium streamlit-folium")
+        st.stop()
 
-            if btn_demo:
-                # Résultat de démonstration réaliste
-                demo_result = {
-                    "qualite_image": "bonne",
-                    "type_specimen": "ouvrière",
-                    "mesures": {
-                        "L_aile_mm": 9.21, "B_aile_mm": 3.24, "Ri": 2.47,
-                        "DI3_mm": 1.74, "OI": "−", "A4_deg": 99.4, "B4_deg": 91.8,
-                        "Ti_L_mm": 3.02, "Ba_L_mm": 1.89, "Ba_W_mm": 1.10,
-                        "Fe_L_mm": 2.76, "T3_L_mm": 4.80, "T4_L_mm": 4.67,
-                        "T4_W_pct": 38, "S4_L_mm": 2.73, "Glossa_mm": 6.14,
-                        "Wt_mm": 4.13, "Pigment": 5, "Hb_mm": 0.39
-                    },
-                    "integrite_ailes": "intactes", "nervation": "normale",
-                    "classification": {
-                        "taxon": "A. m. intermissa", "confiance_pct": 89,
-                        "probabilites": {"A. m. intermissa":89,"A. m. sahariensis":6,"A. m. ligustica":3,"A. m. carnica":1,"Hybride":1}
-                    },
-                    "caracterisation_langue": {
-                        "classe": "moyenne",
-                        "adaptation": "corolles moyennes",
-                        "plantes_cibles": ["Romarin","Jujubier","Thym","Lavande"],
-                        "avantage": "Bonne polyvalence florale avec légère préférence pour les fleurs à corolles courtes à moyennes typiques des garrigues nord-africaines."
-                    },
-                    "profil_productif": {
-                        "specialisation": "miel", "score_miel": 78, "score_pollen": 62,
-                        "score_gelee_royale": 32, "score_propolis": 48,
-                        "justification": "Glossa moyenne (6.14mm) et tomentum intermédiaire (38%) caractéristiques d'une race adaptée à la production mellifère en milieu semi-aride."
-                    },
-                    "resistance_varroa": {
-                        "score_vsh_estime": 72, "comportement_hygienique": "moyen",
-                        "recommandation": "Sélectionner les individus présentant un VSH >75% pour améliorer la résistance naturelle au varroa."
-                    },
-                    "diagnostic_sanitaire": {
-                        "etat": "sain", "anomalies": [], "pathologies_suspectees": [],
-                        "deformations_varroa": False, "ailes_ok": True, "thorax_ok": True, "abdomen_ok": True,
-                        "notes": "Spécimen en excellent état, morphologie typique d'A.m. intermissa de la région de l'Oranie."
-                    },
-                    "interpretation": "Ce spécimen présente les caractères morphométriques typiques d'Apis mellifera intermissa (Ruttner 1988), avec un indice cubital Ri=2.47 et une glossa de 6.14mm. La pigmentation sombre du scutellum (score 5/9) est caractéristique des populations nord-africaines. L'indice discoïdal négatif confirme l'appartenance à la branche africaine de l'espèce (Chahbar et al., 2013).",
-                    "recommandations": [
-                        "Maintenir la pureté raciale par sélection massale sur les colonies présentant les caractères les plus typiques.",
-                        "Programmer la récolte de gelée royale en priorité sur C-12 et B-11 qui présentent de meilleures prédispositions."
-                    ]
+    # Centre par défaut : Tlemcen, Algérie
+    center = [34.8825, -1.3167]
+    m = folium.Map(location=center, zoom_start=12, tiles='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', attr='Google Satellite')
+
+    # Ajouter les zones déjà enregistrées
+    zones_df = st.session_state.data["zones"]
+    color_map = {"Miel": "#D4820A", "Pollen": "#F59E0B", "Gelée Royale": "#9B59B6", "Propolis": "#22C55E"}
+    for _, zone in zones_df.iterrows():
+        try:
+            lat, lng = map(float, zone['coordonnees'].split(','))
+            popup_text = f"<b>{zone['nom']}</b><br>{zone['type_production']}<br>{zone['flore']}"
+            folium.Marker(
+                [lat, lng],
+                popup=popup_text,
+                icon=folium.Icon(color=color_map.get(zone['type_production'], "#6B7280"), icon='info-sign')
+            ).add_to(m)
+        except:
+            pass
+
+    # Affichage de la carte
+    st.subheader("Cliquez sur la carte pour ajouter une zone")
+    output = st_folium(m, width=700, height=500)
+
+    if output and output.get('last_clicked'):
+        lat = output['last_clicked']['lat']
+        lng = output['last_clicked']['lng']
+        st.session_state['temp_lat'] = lat
+        st.session_state['temp_lng'] = lng
+        st.success(f"Position sélectionnée : {lat:.5f}, {lng:.5f}")
+
+    # Formulaire d'ajout
+    with st.form("add_zone_form"):
+        st.markdown("### Ajouter une nouvelle zone")
+        nom = st.text_input("Nom de la zone (ex: Plaine du Romarin)")
+        type_prod = st.selectbox("Type de production", ["Miel", "Pollen", "Gelée Royale", "Propolis"])
+        flore = st.text_input("Flore mellifère dominante (ex: Romarin, Jujubier, Eucalyptus...)")
+        coords = f"{st.session_state.get('temp_lat', '')},{st.session_state.get('temp_lng', '')}"
+        st.caption(f"Coordonnées : {coords if coords != ',' else 'Cliquez d'abord sur la carte'}")
+        submitted = st.form_submit_button("Enregistrer la zone")
+        if submitted:
+            if not nom or not flore or coords == ",":
+                st.error("Veuillez remplir tous les champs et cliquer sur la carte.")
+            else:
+                new_zone = {
+                    "nom": nom,
+                    "type_production": type_prod,
+                    "flore": flore,
+                    "coordonnees": coords,
+                    "date_creation": datetime.now().strftime("%Y-%m-%d")
                 }
-                st.session_state["last_morph_result"] = demo_result
-                st.session_state["last_morph_source"] = "🎭 Démonstration (sans IA)"
-                st.success("✅ Résultat de démonstration généré !")
+                add_zone(new_zone)
+                st.session_state.data = load_dataframes()
+                st.success(f"Zone '{nom}' ajoutée !")
                 st.rerun()
 
-            if btn_analyse:
-                with st.spinner("🔬 Analyse morphométrique en cours…"):
-                    progress = st.progress(0, text="Préparation de l'image…")
-                    time.sleep(0.3)
-                    progress.progress(20, text="Envoi à l'IA…")
-                    
-                    result, source = analyze_auto(img_proc, PROMPT_MORPHO, pref_ia_val)
-                    
-                    progress.progress(90, text="Traitement des résultats…")
-                    time.sleep(0.2)
-                    progress.progress(100, text="Terminé !")
-                    time.sleep(0.3)
-                    progress.empty()
+    # Afficher les zones existantes sous forme de tableau
+    st.subheader("Zones enregistrées")
+    if not zones_df.empty:
+        st.dataframe(zones_df[["nom", "type_production", "flore", "coordonnees", "date_creation"]],
+                     use_container_width=True, hide_index=True)
+    else:
+        st.info("Aucune zone enregistrée. Utilisez la carte ci-dessus pour en ajouter.")
 
-                if "error" in result:
-                    st.error(f"❌ {result['error']}")
-                    st.info("💡 Solutions : 1) Configurez une clé GEMINI_API_KEY dans ⚙️ Configuration IA  2) Installez Ollama localement  3) Utilisez 'Analyse démo' pour tester sans IA")
-                else:
-                    st.session_state["last_morph_result"] = result
-                    st.session_state["last_morph_source"] = source
-                    st.success(f"✅ Analyse terminée via **{source}** !")
-                    st.rerun()
-
-        # ── AFFICHAGE DES RÉSULTATS ──────────────────────────────────────────────
-        if "last_morph_result" in st.session_state:
-            r = st.session_state["last_morph_result"]
-            source = st.session_state.get("last_morph_source","IA")
-
-            # Badge source
-            source_cls = "ia-gemini" if "Gemini" in source else "ia-ollama" if "Ollama" in source else "ia-groq" if "Groq" in source else ""
-            source_icon = "🔵" if "Gemini" in source else "🟢" if "Ollama" in source else "🟠" if "Groq" in source else "🎭"
-            st.markdown(f'<div class="ia-source {source_cls}">{source_icon} Analysé par : {source}</div>', unsafe_allow_html=True)
-
-            c_res1, c_res2 = st.columns([3, 2])
-
-            with c_res1:
-                # Classification raciale
-                classif = r.get("classification", {})
-                taxon = classif.get("taxon","—")
-                conf  = classif.get("confiance_pct", 0)
-                probs = classif.get("probabilites", {})
-
-                st.markdown(f"""<div class="morph-result-card">
-                  <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Taxon identifié par IA</div>
-                  <div style="font-family:'Playfair Display',serif;font-size:24px;font-weight:700;color:var(--earth);margin-bottom:8px">{taxon}</div>
-                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-                    <span style="font-size:20px;font-weight:700;color:var(--honey-dark);font-family:'Playfair Display',serif">{conf}%</span>
-                    <span style="font-size:12px;color:var(--muted)">de confiance</span>
-                    <span class="badge {'b-green' if conf>=85 else 'b-amber' if conf>=70 else 'b-orange'}">{'Haute' if conf>=85 else 'Moyenne' if conf>=70 else 'Faible'}</span>
-                  </div>""", unsafe_allow_html=True)
-                for race, pct in sorted(probs.items(), key=lambda x:-x[1]):
-                    st.markdown(f"""
-                    <div style="margin-bottom:7px">
-                      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
-                        <span style="color:var(--text);font-weight:500">{race}</span>
-                        <span style="font-family:'JetBrains Mono',monospace;color:var(--muted)">{pct:.0f}%</span>
-                      </div>
-                      <div style="height:7px;background:var(--wax);border-radius:4px;overflow:hidden">
-                        <div style="height:100%;width:{pct}%;background:linear-gradient(90deg,#F2C14E,#C97A08);border-radius:4px"></div>
-                      </div>
-                    </div>""", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
-
-                # Mesures morphométriques
-                st.markdown("<br>", unsafe_allow_html=True)
-                st.markdown('<div class="section-title" style="font-size:15px">📐 Mesures morphométriques (19 caractères)</div>', unsafe_allow_html=True)
-                mesures = r.get("mesures", {})
-                REF = {
-                    "L_aile_mm":    ("Long. aile ant.","mm",(8.9,9.6),(9.1,9.8),(9.1,9.8),(8.7,9.3)),
-                    "B_aile_mm":    ("Larg. aile ant.","mm",(3.0,3.4),(3.1,3.5),(3.1,3.4),(2.9,3.2)),
-                    "Ri":           ("Indice cubital", "ratio",(2.0,2.8),(2.4,3.2),(2.6,3.5),(2.1,2.9)),
-                    "DI3_mm":       ("Cellule radiale","mm",(1.5,1.9),(1.6,2.0),(1.6,2.0),(1.4,1.8)),
-                    "A4_deg":       ("Angle A4",       "°",(96,103),(98,105),(95,102),(95,102)),
-                    "B4_deg":       ("Angle B4",       "°",(88,95),(89,97),(86,93),(87,93)),
-                    "Ti_L_mm":      ("Long. tibia P3", "mm",(2.8,3.2),(2.9,3.3),(3.0,3.4),(2.7,3.1)),
-                    "Ba_L_mm":      ("Long. basitarse","mm",(1.7,2.0),(1.8,2.1),(1.8,2.1),(1.6,1.9)),
-                    "T3_L_mm":      ("Larg. tergite 3","mm",(4.6,5.0),(4.7,5.1),(4.7,5.2),(4.4,4.8)),
-                    "T4_W_pct":     ("Tomentum T4",    "%",(30,45),(45,60),(35,50),(25,40)),
-                    "Glossa_mm":    ("Long. glossa",   "mm",(5.9,6.3),(6.3,6.7),(6.4,6.8),(5.8,6.2)),
-                    "Wt_mm":        ("Largeur tête",   "mm",(4.0,4.3),(4.1,4.4),(4.1,4.4),(3.9,4.2)),
-                    "Pigment":      ("Pigmentation",   "/9",(4,7),(1,3),(1,3),(5,8)),
-                    "Fe_L_mm":      ("Long. fémur P3", "mm",(2.6,2.9),(2.7,3.0),(2.7,3.0),(2.5,2.8)),
-                    "S4_L_mm":      ("Long. sternite 4","mm",(2.5,2.9),(2.6,3.0),(2.6,3.0),(2.4,2.8)),
-                    "Hb_mm":        ("Pubescence abd.", "mm",(0.3,0.5),(0.2,0.4),(0.2,0.4),(0.3,0.5)),
-                    "Ba_W_mm":      ("Larg. basitarse","mm",(1.0,1.2),(1.0,1.2),(1.0,1.2),(0.9,1.1)),
-                    "OI":           ("Indice discoïdal","",None,None,None,None),
-                    "Integrite":    ("Intégrité ailes","",None,None,None,None),
-                }
-                rows_html = ""
-                for code, val in mesures.items():
-                    if code not in REF: continue
-                    nom, unit, rint, rlig, rcar, rsah = REF[code]
-                    # Déterminer statut selon la race principale
-                    stat_cls = "mval-ok"
-                    if rint and isinstance(val, (int,float)):
-                        in_inti = rint[0]<=val<=rint[1]
-                        if not in_inti:
-                            in_any = (rlig and rlig[0]<=val<=rlig[1]) or (rcar and rcar[0]<=val<=rcar[1]) or (rsah and rsah[0]<=val<=rsah[1])
-                            stat_cls = "mval-warn" if in_any else "mval-bad"
-                    ref_txt = f"inti:{rint[0]}–{rint[1]}" if rint else ""
-                    rows_html += f"""<div class="measure-row">
-                        <div style="flex:1"><strong>{code}</strong> — {nom}</div>
-                        <div style="font-size:10px;color:var(--muted);margin-right:10px">{ref_txt}</div>
-                        <span class="mval {stat_cls}">{val}{unit}</span>
-                    </div>"""
-                st.markdown(f'<div style="background:white;border-radius:14px;padding:14px;border:1px solid rgba(180,150,80,0.18)">{rows_html}</div>', unsafe_allow_html=True)
-
-            with c_res2:
-                # Profil productif
-                pp = r.get("profil_productif", {})
-                if pp:
-                    st.markdown('<div class="section-title" style="font-size:15px">🏭 Profil productif</div>', unsafe_allow_html=True)
-                    spec = pp.get("specialisation","polyvalent")
-                    spec_badge = {"miel":"b-amber","pollen":"b-green","gelée_royale":"b-purple","polyvalent":"b-gray"}.get(spec,"b-gray")
-                    spec_icons = {"miel":"🍯 Miel","pollen":"🌿 Pollen","gelée_royale":"👑 Gelée R.","polyvalent":"⚖️ Polyvalent"}
-                    st.markdown(f'<div style="margin-bottom:12px">Spécialisation principale : <span class="badge {spec_badge}">{spec_icons.get(spec,spec)}</span></div>', unsafe_allow_html=True)
-                    prods = [("🍯 Miel",pp.get("score_miel",0),"#d97706"),("🌿 Pollen",pp.get("score_pollen",0),"#16a34a"),
-                             ("👑 Gelée R.",pp.get("score_gelee_royale",0),"#9333ea"),("🟤 Propolis",pp.get("score_propolis",0),"#b45309")]
-                    html_pp = '<div class="prod-profile-grid">'
-                    for label, score, col in prods:
-                        html_pp += f'<div class="pp-item"><div class="pp-score" style="color:{col}">{score}</div><div class="pp-label">{label}</div></div>'
-                    html_pp += "</div>"
-                    justif = pp.get("justification","")
-                    html_pp += f'<div style="font-size:12px;color:var(--muted);padding:10px;background:var(--cream);border-radius:9px;line-height:1.6">{justif}</div>'
-                    st.markdown(html_pp, unsafe_allow_html=True)
-
-                # Caractérisation langue
-                lang = r.get("caracterisation_langue", {})
-                if lang:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    st.markdown('<div class="section-title" style="font-size:15px">👅 Langue (Glossa)</div>', unsafe_allow_html=True)
-                    classe = lang.get("classe","moyenne")
-                    pct = {"courte":18,"moyenne":55,"longue":90}.get(classe,50)
-                    plantes = ", ".join(lang.get("plantes_cibles",[]))
-                    st.markdown(f"""
-                    <div style="background:var(--forest-pale);border-radius:12px;padding:14px;border:1px solid rgba(90,142,64,.2)">
-                      <div style="font-size:13px;margin-bottom:6px">Classe : <strong>{classe.capitalize()}</strong></div>
-                      <div class="langue-bar"><div class="langue-fill" style="width:{pct}%"></div></div>
-                      <div style="display:flex;justify-content:space-between;font-size:9.5px;color:var(--muted);margin-bottom:8px">
-                        <span>Courte (&lt;6.0mm)</span><span>Longue (&gt;6.4mm)</span></div>
-                      <div style="font-size:12px;color:var(--forest-mid);margin-bottom:4px">🌸 <strong>Adaptation :</strong> {lang.get("adaptation","—")}</div>
-                      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">🌿 <strong>Plantes :</strong> {plantes}</div>
-                      <div style="font-size:11.5px;color:var(--forest);padding:8px;background:white;border-radius:8px">{lang.get("avantage","—")}</div>
-                    </div>""", unsafe_allow_html=True)
-
-                # Résistance VSH
-                vsh = r.get("resistance_varroa", {})
-                if vsh:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    st.markdown('<div class="section-title" style="font-size:15px">🛡️ Résistance Varroa (VSH)</div>', unsafe_allow_html=True)
-                    vsh_score = vsh.get("score_vsh_estime", 70)
-                    vsh_col = "#22c55e" if vsh_score>=75 else "#f59e0b" if vsh_score>=55 else "#ef4444"
-                    st.markdown(f"""
-                    <div style="background:white;border-radius:12px;padding:14px;border:1px solid rgba(180,150,80,0.18)">
-                      <div style="display:flex;align-items:center;gap:14px;margin-bottom:10px">
-                        <div style="font-family:'Playfair Display',serif;font-size:34px;font-weight:700;color:{vsh_col};line-height:1">{vsh_score}%</div>
-                        <div>
-                          <div style="font-weight:600;font-size:13px">Score VSH estimé</div>
-                          <div style="font-size:12px;color:var(--muted)">Hygiène : {vsh.get("comportement_hygienique","—")}</div>
-                        </div>
-                      </div>
-                      <div style="height:8px;background:var(--wax);border-radius:4px;overflow:hidden;margin-bottom:8px">
-                        <div style="height:100%;width:{vsh_score}%;background:{vsh_col};border-radius:4px"></div>
-                      </div>
-                      <div style="font-size:12px;color:var(--muted)">{vsh.get("recommandation","")}</div>
-                    </div>""", unsafe_allow_html=True)
-
-                # Diagnostic sanitaire
-                diag = r.get("diagnostic_sanitaire", {})
-                if diag:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    etat = diag.get("etat","sain")
-                    etat_cfg = {"sain":("#166534","#f0fdf4","✅"),"suspect":("#92400e","#fffbeb","⚠️"),"malade":("#991b1b","#fef2f2","🚨")}
-                    ecol, ebg, eico = etat_cfg.get(etat, ("#166534","#f0fdf4","✅"))
-                    st.markdown('<div class="section-title" style="font-size:15px">🩺 Diagnostic sanitaire</div>', unsafe_allow_html=True)
-                    checks = [("Ailes",diag.get("ailes_ok",True)),("Thorax",diag.get("thorax_ok",True)),
-                              ("Abdomen",diag.get("abdomen_ok",True)),("Anti-Varroa",not diag.get("deformations_varroa",False))]
-                    html_diag = f'<div style="background:{ebg};border-radius:12px;padding:14px;border:1px solid {ecol}44">'
-                    html_diag += f'<div style="font-weight:700;color:{ecol};margin-bottom:10px">{eico} {etat.upper()}</div>'
-                    html_diag += '<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px">'
-                    for label, ok in checks:
-                        html_diag += f'<span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:8px;background:{"#dcfce7" if ok else "#fee2e2"};color:{"#15803d" if ok else "#b91c1c"}">{"✓" if ok else "✗"} {label}</span>'
-                    html_diag += "</div>"
-                    anomalies = diag.get("anomalies",[])
-                    if anomalies: html_diag += f'<div style="font-size:12px;color:#991b1b"><strong>Anomalies :</strong> {", ".join(anomalies)}</div>'
-                    notes = diag.get("notes","")
-                    if notes: html_diag += f'<div style="font-size:12px;color:var(--muted);margin-top:6px">{notes}</div>'
-                    html_diag += "</div>"
-                    st.markdown(html_diag, unsafe_allow_html=True)
-
-            # Interprétation complète
-            interp = r.get("interpretation","")
-            recs = r.get("recommandations",[])
-            if interp:
-                st.markdown("<br>", unsafe_allow_html=True)
-                col_interp, col_save = st.columns([3, 1])
-                with col_interp:
-                    st.markdown('<div class="section-title" style="font-size:15px">🔬 Interprétation scientifique</div>', unsafe_allow_html=True)
-                    st.markdown(f'<div style="background:white;border-radius:12px;padding:16px;border:1px solid rgba(180,150,80,0.18);font-size:13.5px;line-height:1.8;color:var(--text)">{interp}</div>', unsafe_allow_html=True)
-                    if recs:
-                        st.markdown('<div style="margin-top:12px"><strong style="font-size:13px">📌 Recommandations :</strong></div>', unsafe_allow_html=True)
-                        for rec in recs:
-                            st.markdown(f'<div style="font-size:13px;padding:6px 10px;margin:4px 0;background:var(--forest-pale);border-radius:8px;border-left:3px solid var(--forest-l);color:var(--text)">▸ {rec}</div>', unsafe_allow_html=True)
-
-                with col_save:
-                    st.markdown('<div class="section-title" style="font-size:15px">💾 Sauvegarder</div>', unsafe_allow_html=True)
-                    notes_save = st.text_area("Notes complémentaires", placeholder="Observations terrain…", key="m_notes_save", height=80)
-                    if st.button("💾 Enregistrer l'analyse", type="primary", use_container_width=True):
-                        mes = r.get("mesures",{})
-                        ruche_code = ruche_pour_analyse.split("—")[0].strip() if "—" in ruche_pour_analyse else ruche_pour_analyse
-                        new_row = {
-                            "Date": str(datetime.now().date()),
-                            "Ruche": ruche_code,
-                            "Taxon": classif.get("taxon","—"),
-                            "Confiance_pct": conf,
-                            "L_aile_mm": mes.get("L_aile_mm",0),
-                            "Ri": mes.get("Ri",0),
-                            "Glossa_mm": mes.get("Glossa_mm",0),
-                            "Ti_L_mm": mes.get("Ti_L_mm",0),
-                            "Tomentum_pct": mes.get("T4_W_pct",0),
-                            "Profil_prod": pp.get("specialisation","—") if pp else "—",
-                            "VSH_estime": vsh.get("score_vsh_estime",0) if vsh else 0,
-                            "Source_IA": source,
-                            "Analyste": analyste,
-                        }
-                        if notes_save: new_row["Notes"] = notes_save
-                        st.session_state.morph_analyses = pd.concat([
-                            st.session_state.morph_analyses, pd.DataFrame([new_row])
-                        ], ignore_index=True)
-                        save_table("morpho_analyses", st.session_state.morph_analyses)
-                        st.success("✅ Analyse sauvegardée sur disque ✓")
-                        # Effacer le résultat affiché
-                        del st.session_state["last_morph_result"]
-                        del st.session_state["last_morph_source"]
-                        time.sleep(1)
-                        st.rerun()
-
-    # ══════════════════════════════════════════════════
-    # ONGLET 2 : DIAGNOSTIC RUCHE/CADRE
-    # ══════════════════════════════════════════════════
-    with tab2:
-        st.markdown(alert("🩺", "<strong>Diagnostic IA :</strong> Téléversez une photo de ruche, cadre, planche d'envol ou groupe d'abeilles. L'IA détecte les maladies, parasites et anomalies avec plan d'action.", "al-info"), unsafe_allow_html=True)
-
-        c_dl, c_dr = st.columns([3, 2])
-        with c_dl:
-            diag_file = st.file_uploader("Photo ruche / cadre / colonie", type=["jpg","jpeg","png","webp"],
-                key="diag_upload", help="Cadre de couvain, extérieur ruche, planche d'envol, rayons…")
-            if diag_file:
-                diag_image = Image.open(diag_file).convert("RGB")
-                st.image(diag_image, caption="Photo pour diagnostic", width=360)
-
-            col_d1, col_d2 = st.columns(2)
-            with col_d1:
-                diag_type = st.selectbox("Type de photo", ["cadre de couvain","ruche extérieure","groupe d'abeilles","rayons/cellules","planche d'envol"])
-            with col_d2:
-                diag_saison = st.selectbox("Saison", ["Printemps","Été","Automne","Hiver"])
-            diag_symp = st.text_area("Symptômes observés (optionnel)", placeholder="Abeilles mortes devant la ruche, couvain parsemé, odeur suspecte…", height=60)
-
-        with c_dr:
-            if diag_file:
-                pref_diag = st.selectbox("Service IA", ["auto","gemini","groq","ollama"], key="diag_ia")
-                btn_diag = st.button("🩺 Lancer le diagnostic", type="primary", use_container_width=True)
-
-                if btn_diag:
-                    symp_line = f"\nSymptômes signalés : {diag_symp}" if diag_symp else ""
-                    prompt_d = PROMPT_DIAGNOSTIC.format(
-                        photo_type=diag_type, saison=diag_saison, symptomes_line=symp_line
-                    )
-                    with st.spinner("Diagnostic en cours…"):
-                        result_d, source_d = analyze_auto(diag_image, prompt_d, pref_diag)
-                    
-                    if "error" in result_d:
-                        st.error(result_d["error"])
-                    else:
-                        v = result_d.get("verdict",{})
-                        score = v.get("score_sante",75)
-                        etat = v.get("etat","vigilance")
-                        ecfg = {"sain":("#166534","#f0fdf4","✅","SAIN"),"vigilance":("#92400e","#fffbeb","👁","VIGILANCE"),
-                                "malade":("#c2410c","#fff7ed","⚠️","MALADE"),"critique":("#991b1b","#fef2f2","🚨","CRITIQUE")}
-                        ec,eb,ei,el = ecfg.get(etat,ecfg["vigilance"])
-                        st.markdown(f"""
-                        <div style="background:{eb};border:2px solid {ec};border-radius:16px;padding:18px;margin-bottom:14px">
-                          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-                            <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:{ec}">{ei} {el}</div>
-                            <div style="font-family:'Playfair Display',serif;font-size:28px;font-weight:700;color:{ec}">{score}/100</div>
-                          </div>
-                          <div style="height:7px;background:rgba(0,0,0,.08);border-radius:4px;overflow:hidden;margin-bottom:10px">
-                            <div style="height:100%;width:{score}%;background:{ec};border-radius:4px"></div>
-                          </div>
-                          <p style="font-size:13px;color:{ec};line-height:1.6">{v.get("resume","")}</p>
-                        </div>""", unsafe_allow_html=True)
-
-                        for mal in result_d.get("maladies_detectees",[]):
-                            gcol = {"critique":"#ef4444","sévère":"#f97316","modérée":"#f59e0b","légère":"#22c55e"}.get(mal.get("gravite",""),"#f59e0b")
-                            st.markdown(f"""
-                            <div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px">
-                              <strong>{mal.get("nom","")}</strong> — <span style="font-size:11.5px;color:var(--muted)">{mal.get("agent","")}</span>
-                              <span class="badge" style="float:right;background:{gcol}22;color:{gcol}">{mal.get("gravite","")}</span>
-                              <div style="font-size:12px;color:var(--muted);margin:6px 0">{mal.get("signes","")}</div>
-                              <div style="background:var(--honey-pale);border-radius:8px;padding:8px 10px;font-size:12px">
-                                💊 {mal.get("traitement","—")} · ⏰ <strong style="color:#b91c1c">{mal.get("urgence","—")}</strong></div>
-                            </div>""", unsafe_allow_html=True)
-
-                        for plan in result_d.get("plan_action",[]):
-                            pc = {1:"#ef4444",2:"#f97316",3:"#f59e0b",4:"#22c55e"}.get(plan.get("priorite",3),"#f59e0b")
-                            st.markdown(f"""
-                            <div style="display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid rgba(180,150,80,0.12)">
-                              <div style="width:23px;height:23px;border-radius:50%;background:{pc};color:white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">{plan.get("priorite","?")}</div>
-                              <div><div style="font-size:13px;font-weight:500">{plan.get("action","")}</div>
-                                <div style="font-size:11px;color:var(--muted)">⏰ {plan.get("delai","")}</div></div>
-                            </div>""", unsafe_allow_html=True)
-            else:
-                st.info("👆 Téléversez une photo pour commencer le diagnostic")
-
-    # ══════════════════════════════════════════════════
-    # ONGLET 3 : SAISIE MANUELLE
-    # ══════════════════════════════════════════════════
-    with tab3:
-        st.markdown('<div class="section-title">Saisie manuelle des mesures</div>', unsafe_allow_html=True)
-        c_f, c_r = st.columns([3, 2])
-        with c_f:
-            m_ruche = st.selectbox("Ruche analysée", [f"{r['ID']} — {r['Nom']}" for _,r in st.session_state.ruches.iterrows()])
-            m_analyste = st.text_input("Analyste", "Mohammed A.", key="m_analyste_man")
-            col1,col2,col3 = st.columns(3)
-            with col1:
-                m_L = st.number_input("L aile (mm)", 7.0, 12.0, 9.18, 0.01)
-                m_B = st.number_input("B aile (mm)", 2.5, 4.5, 3.21, 0.01)
-            with col2:
-                m_Ri = st.number_input("Indice cubital Ri", 1.0, 5.0, 2.45, 0.01)
-                m_Ac = st.number_input("Glossa (mm)", 5.0, 8.0, 6.12, 0.01)
-            with col3:
-                m_Ti = st.number_input("Tibia Ti-L (mm)", 2.0, 4.0, 3.01, 0.01)
-                m_T3 = st.number_input("Tergite 3 (mm)", 3.5, 5.5, 4.78, 0.01)
-            col4,col5 = st.columns(2)
-            with col4:
-                m_Tom = st.slider("Tomentum T4 (%)", 0, 100, 37)
-                m_Pv  = st.slider("Pigmentation (1–9)", 1, 9, 5)
-            with col5:
-                m_A4 = st.number_input("Angle A4 (°)", 85.0, 115.0, 99.2, 0.1)
-                m_B4 = st.number_input("Angle B4 (°)", 80.0, 110.0, 91.5, 0.1)
-
-        with c_r:
-            best_r, conf_r, probs_r = classify_local(m_L, m_Ri, m_Ac, m_Pv, m_Tom, m_Ti)
-            st.markdown(f"""<div class="morph-result-card" style="margin-top:10px">
-              <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Classification locale (Ruttner 1988)</div>
-              <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--earth);margin-bottom:6px">{best_r}</div>
-              <div style="font-size:18px;font-weight:700;color:var(--honey-dark);margin-bottom:14px">{conf_r:.0f}% confiance</div>""", unsafe_allow_html=True)
-            for race, pct in sorted(probs_r.items(), key=lambda x:-x[1]):
-                st.markdown(f"""<div style="margin-bottom:6px">
-                  <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:2px">
-                    <span>{race}</span><span style="font-family:'JetBrains Mono',monospace">{pct:.0f}%</span></div>
-                  <div style="height:6px;background:var(--wax);border-radius:3px;overflow:hidden">
-                    <div style="height:100%;width:{pct}%;background:linear-gradient(90deg,#F2C14E,#C97A08);border-radius:3px"></div>
-                  </div></div>""", unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        if st.button("💾 Sauvegarder la saisie manuelle", type="primary"):
-            new_m = {"Date":str(datetime.now().date()),"Ruche":m_ruche.split("—")[0].strip(),
-                     "Taxon":best_r,"Confiance_pct":round(conf_r,0),
-                     "L_aile_mm":m_L,"Ri":m_Ri,"Glossa_mm":m_Ac,"Ti_L_mm":m_Ti,"Tomentum_pct":m_Tom,
-                     "Profil_prod":"miel","VSH_estime":70,"Source_IA":"Saisie manuelle","Analyste":m_analyste}
-            st.session_state.morph_analyses = pd.concat([st.session_state.morph_analyses, pd.DataFrame([new_m])], ignore_index=True)
-            save_table("morpho_analyses", st.session_state.morph_analyses)
-            st.success(f"✅ Analyse sauvegardée sur disque : {best_r} ({conf_r:.0f}%)")
-
-    # ══════════════════════════════════════════════════
-    # ONGLET 4 : RÉFÉRENTIEL
-    # ══════════════════════════════════════════════════
-    with tab4:
-        ref_df = pd.DataFrame({
-            "Code":["L","B","Ri","DI3","OI","Ti-L","Ba-L","T3-L","T4-W","Ac","Wt","Pv","Hb","A4","B4"],
-            "Caractère":["Long. aile ant.","Larg. aile ant.","Indice cubital","Long. cellule 3","Indice discoïdal",
-                         "Long. tibia P3","Long. basitarse","Larg. tergite 3","Tomentum T4","Glossa/langue",
-                         "Largeur tête","Pigmentation","Pubescence","Angle A4","Angle B4"],
-            "Unité":["mm","mm","ratio","mm","","mm","mm","mm","%","mm","mm","/9","mm","°","°"],
-            "A.m. intermissa":["8.9–9.6","3.0–3.4","2.0–2.8","1.5–1.9","+/−","2.8–3.2","1.7–2.0","4.6–5.0","30–45","5.9–6.3","4.0–4.3","4–7","0.3–0.5","96–103","88–95"],
-            "A.m. ligustica":["9.1–9.8","3.1–3.5","2.4–3.2","1.6–2.0","+","2.9–3.3","1.8–2.1","4.7–5.1","45–60","6.3–6.7","4.1–4.4","1–3","0.2–0.4","98–105","89–97"],
-            "A.m. carnica":["9.1–9.8","3.1–3.4","2.6–3.5","1.6–2.0","+","3.0–3.4","1.8–2.1","4.7–5.2","35–50","6.4–6.8","4.1–4.4","1–3","0.2–0.4","95–102","86–93"],
-            "A.m. sahariensis":["8.7–9.3","2.9–3.2","2.1–2.9","1.4–1.8","−","2.7–3.1","1.6–1.9","4.4–4.8","25–40","5.8–6.2","3.9–4.2","5–8","0.3–0.5","95–102","87–93"],
-        })
-        st.dataframe(ref_df, use_container_width=True, hide_index=True)
-
-    # ══════════════════════════════════════════════════
-    # ONGLET 5 : HISTORIQUE
-    # ══════════════════════════════════════════════════
-    with tab5:
-        df_hist = st.session_state.morph_analyses
-        if len(df_hist) > 0:
-            st.dataframe(df_hist.sort_values("Date",ascending=False), use_container_width=True, hide_index=True,
-                column_config={"Confiance_pct":st.column_config.ProgressColumn(format="%d%%",min_value=0,max_value=100),
-                               "VSH_estime":st.column_config.ProgressColumn(format="%d%%",min_value=0,max_value=100)})
-            csv = df_hist.to_csv(index=False).encode("utf-8")
-            st.download_button("⬇ Exporter CSV", csv, "morpho_analyses.csv", "text/csv")
-        else:
-            st.info("Aucune analyse enregistrée. Effectuez une analyse IA pour commencer.")
-
-# =====================================================
-# PAGE : CONFIGURATION IA
-# =====================================================
-elif current_page == "config_ia":
-    st.markdown('<div class="page-title">⚙️ Configuration IA Morphométrie</div>', unsafe_allow_html=True)
-    st.markdown('<div class="page-sub">Services gratuits & permanents · Aucun abonnement payant requis</div>', unsafe_allow_html=True)
-
-    st.markdown("""
-    <div style="background:white;border-radius:18px;padding:24px;border:1px solid rgba(180,150,80,0.2);margin-bottom:20px">
-      <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:700;color:var(--earth);margin-bottom:16px">
-        📋 Guide de configuration — 3 options gratuites
-      </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("""
-    ### 🔵 Option 1 : Google Gemini 2.0 Flash (RECOMMANDÉE)
-    **Entièrement gratuit — 15 req/min — 1 500 req/jour — 1M tokens/jour**
-    
-    1. Allez sur **https://aistudio.google.com/apikey**
-    2. Connectez-vous avec votre compte Google (gratuit)
-    3. Cliquez **"Create API Key"**
-    4. Copiez votre clé (commence par `AIza...`)
-    5. Ajoutez dans `.streamlit/secrets.toml` :
-    ```toml
-    GEMINI_API_KEY = "AIza..."
-    ```
-    OU définissez la variable d'environnement :
-    ```bash
-    export GEMINI_API_KEY="AIza..."
-    ```
-    """)
-
-    st.markdown("""
-    ---
-    ### 🟠 Option 2 : Groq (Llama 3.2 Vision — Backup)
-    **Gratuit — 30 req/min — 14 400 req/jour — Ultra-rapide**
-    
-    1. Allez sur **https://console.groq.com/keys**
-    2. Créez un compte gratuit
-    3. Cliquez **"Create API Key"**
-    4. Ajoutez dans `.streamlit/secrets.toml` :
-    ```toml
-    GROQ_API_KEY = "gsk_..."
-    ```
-    """)
-
-    st.markdown("""
-    ---
-    ### 🟢 Option 3 : Ollama (Local — Sans internet — Illimité)
-    **100% local — Aucune clé API — Aucune limite — Fonctionne hors ligne**
-    
-    1. Installez Ollama : **https://ollama.com/download**
-    2. Téléchargez le modèle vision :
-    ```bash
-    ollama pull llava:7b
-    # ou pour plus de précision :
-    ollama pull llava:13b
-    ```
-    3. Démarrez le serveur :
-    ```bash
-    ollama serve
-    ```
-    4. Testez : http://localhost:11434
-    
-    Configuration optionnelle dans secrets.toml :
-    ```toml
-    OLLAMA_BASE_URL = "http://localhost:11434"
-    OLLAMA_MODEL = "llava:7b"
-    ```
-    """)
-
-    st.markdown("---")
-    st.markdown("""
-    ### 📁 Fichier `.streamlit/secrets.toml` complet
-    ```toml
-    # ApiTrack Pro — Configuration IA Morphométrie
-    # Tous les services sont GRATUITS
-    
-    # Option 1 : Google Gemini (recommandé)
-    GEMINI_API_KEY = "AIza..."
-    
-    # Option 2 : Groq (backup)
-    GROQ_API_KEY = "gsk_..."
-    
-    # Option 3 : Ollama local (optionnel)
-    OLLAMA_BASE_URL = "http://localhost:11434"
-    OLLAMA_MODEL = "llava:7b"
-    ```
-    """)
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # Test de connexion
-    st.markdown('<div class="section-title">🧪 Test de connexion</div>', unsafe_allow_html=True)
-    c_t1, c_t2, c_t3 = st.columns(3)
-    with c_t1:
-        if st.button("🔵 Tester Gemini", use_container_width=True):
-            if not GEMINI_API_KEY:
-                st.error("GEMINI_API_KEY non configurée")
-            elif not GEMINI_AVAILABLE:
-                st.error("pip install google-generativeai")
-            else:
-                with st.spinner("Test en cours…"):
-                    try:
-                        genai.configure(api_key=GEMINI_API_KEY)
-                        m = genai.GenerativeModel("gemini-2.0-flash-exp")
-                        r = m.generate_content("Répondez uniquement : OK")
-                        st.success(f"✅ Gemini opérationnel ! Réponse : {r.text.strip()[:30]}")
-                    except Exception as e:
-                        st.error(f"❌ {e}")
-    with c_t2:
-        if st.button("🟠 Tester Groq", use_container_width=True):
-            if not GROQ_API_KEY:
-                st.error("GROQ_API_KEY non configurée")
-            else:
-                with st.spinner("Test en cours…"):
-                    try:
-                        r = req_lib.post("https://api.groq.com/openai/v1/chat/completions",
-                            headers={"Authorization":f"Bearer {GROQ_API_KEY}","Content-Type":"application/json"},
-                            json={"model":"llama-3.2-11b-vision-preview","messages":[{"role":"user","content":"Dis OK"}],"max_tokens":10},
-                            timeout=15)
-                        data = r.json()
-                        if "error" in data: st.error(f"❌ {data['error']['message']}")
-                        else: st.success(f"✅ Groq opérationnel ! ")
-                    except Exception as e:
-                        st.error(f"❌ {e}")
-    with c_t3:
-        if st.button("🟢 Tester Ollama", use_container_width=True):
-            with st.spinner("Test Ollama local…"):
-                try:
-                    r = req_lib.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=5)
-                    if r.status_code == 200:
-                        models = [m["name"] for m in r.json().get("models",[])]
-                        llava_models = [m for m in models if "llava" in m.lower()]
-                        if llava_models:
-                            st.success(f"✅ Ollama actif · Modèles vision : {', '.join(llava_models)}")
-                        else:
-                            st.warning(f"⚠️ Ollama actif mais LLaVA non installé. Lancez : ollama pull llava:7b\nModèles disponibles : {', '.join(models[:5])}")
-                    else:
-                        st.error(f"❌ Ollama répond avec code {r.status_code}")
-                except Exception as e:
-                    st.error(f"❌ Ollama non accessible : {e}")
-
-# =====================================================
-# TOUTES LES AUTRES PAGES (Dashboard, Ruches, etc.)
-# =====================================================
+# ─────────────────────────────────────────────
+# PAGE: DASHBOARD (inchangée)
+# ─────────────────────────────────────────────
 elif current_page == "dashboard":
+    df = st.session_state.data["ruches"]
+    rec = st.session_state.data["recoltes"]
+
     st.markdown('<div class="page-title">🐝 Vue d\'ensemble — ApiTrack Pro</div>', unsafe_allow_html=True)
-    st.markdown('<div class="page-sub">Tableau de bord centralisé · Saison 2024–2025</div>', unsafe_allow_html=True)
-    df = st.session_state.ruches
-    rec = st.session_state.recoltes
-    total_miel   = df["Miel_kg"].sum()
+    st.markdown('<div class="page-subtitle">Tableau de bord centralisé · Saison 2024–2025</div>', unsafe_allow_html=True)
+
+    total_miel = df["Miel_kg"].sum()
     total_pollen = df["Pollen_kg"].sum()
-    total_gelee_g= df["Gelée_g"].sum()
-    c1,c2,c3,c4,c5,c6 = st.columns(6)
-    with c1: st.metric("🏠 Ruches",len(df))
-    with c2: st.metric("🍯 Miel",f"{total_miel:.0f} kg","+18%")
-    with c3: st.metric("🌿 Pollen",f"{total_pollen:.1f} kg","+22%")
-    with c4: st.metric("👑 Gelée R.",f"{total_gelee_g:.0f} g","+35%")
-    with c5: st.metric("🔬 Analyses",len(st.session_state.morph_analyses))
-    with c6: st.metric("🚨 Alertes",len(df[df["Statut"].isin(["Critique","Attention"])]))
+    total_gelee_g = df["gelee_g"].sum()
+    ca_miel = (rec[rec["Type"]=="Miel"]["Quantite_kg"] * rec[rec["Type"]=="Miel"]["Prix_kg"]).sum()
+    ca_pollen = (rec[rec["Type"]=="Pollen"]["Quantite_kg"] * rec[rec["Type"]=="Pollen"]["Prix_kg"]).sum()
+    ca_gelee = (rec[rec["Type"]=="Gelée Royale"]["Quantite_kg"] * rec[rec["Type"]=="Gelée Royale"]["Prix_kg"]).sum()
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    with c1: st.markdown(metric_card("🏠", str(len(df)), "Ruches actives", "+2 ce mois"), unsafe_allow_html=True)
+    with c2: st.markdown(metric_card("🍯", f"{total_miel:.0f} kg", "Miel récolté", "+18% vs 2023"), unsafe_allow_html=True)
+    with c3: st.markdown(metric_card("🌼", f"{total_pollen:.1f} kg", "Pollen récolté", "+22% vs 2023"), unsafe_allow_html=True)
+    with c4: st.markdown(metric_card("👑", f"{total_gelee_g:.0f} g", "Gelée royale", "+35% vs 2023"), unsafe_allow_html=True)
+    with c5:
+        ca_total = ca_miel + ca_pollen + ca_gelee
+        st.markdown(metric_card("💰", f"{ca_total:,.0f} DA", "Chiffre d'affaires", "+25% vs 2023"), unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    section_header("🏠 Ruches — Aperçu rapide")
-    cols = st.columns(4)
-    for i,(_, r) in enumerate(df.iterrows()):
-        with cols[i%4]:
-            st.markdown(ruche_card_html(r), unsafe_allow_html=True)
 
+    col_l, col_r = st.columns([3, 2])
+
+    with col_l:
+        section_header("📊 Production par type (2024)")
+        rec_df = rec.copy()
+        rec_df["Valeur"] = rec_df.apply(lambda r: r["Quantite_kg"]*r["Prix_kg"], axis=1)
+        prod_by_type = rec_df.groupby("Type").agg({"Quantite_kg":"sum","Valeur":"sum"}).reset_index()
+
+        fig = go.Figure()
+        colors = {"Miel": "#D4820A", "Pollen": "#F59E0B", "Gelée Royale": "#9B59B6"}
+        for _, row in prod_by_type.iterrows():
+            fig.add_trace(go.Bar(
+                x=[row["Type"]], y=[row["Valeur"]],
+                name=row["Type"],
+                marker_color=colors.get(row["Type"], "#6B7280"),
+                text=f"{row['Valeur']:,.0f} DA",
+                textposition="outside",
+                textfont=dict(size=12, color="#4A3728"),
+            ))
+        fig.update_layout(
+            height=280, showlegend=False,
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(253,250,244,0.5)',
+            yaxis=dict(showgrid=True, gridcolor='rgba(180,150,80,0.15)', tickfont=dict(color='#6B6040')),
+            xaxis=dict(tickfont=dict(size=13, color='#4A3728', family='Playfair Display')),
+            margin=dict(l=10, r=10, t=30, b=10),
+            bargap=0.35
+        )
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+        section_header("📈 Évolution mensuelle de la production")
+        months = ["Jan","Fév","Mar","Avr","Mai","Juin","Juil","Août","Sep","Oct","Nov","Déc"]
+        miel_m = [0,8,12,35,60,75,55,40,22,5,0,0]
+        pollen_m = [0,5,18,28,22,15,10,8,5,2,0,0]
+        gelee_m = [0,0,8,18,35,48,38,25,12,0,0,0]
+
+        fig2 = go.Figure()
+        fig2.add_trace(go.Scatter(x=months, y=miel_m, name="Miel (kg)", fill='tozeroy',
+            fillcolor='rgba(212,130,10,0.12)', line=dict(color='#D4820A', width=2.5),
+            mode='lines+markers', marker=dict(size=6, color='#D4820A')))
+        fig2.add_trace(go.Scatter(x=months, y=pollen_m, name="Pollen (kg)", fill='tozeroy',
+            fillcolor='rgba(245,158,11,0.1)', line=dict(color='#F59E0B', width=2, dash='dot'),
+            mode='lines+markers', marker=dict(size=5, color='#F59E0B')))
+        fig2.add_trace(go.Scatter(x=months, y=[g*10 for g in gelee_m], name="Gelée royale (g×10)", fill='tozeroy',
+            fillcolor='rgba(155,89,182,0.1)', line=dict(color='#9B59B6', width=2, dash='dash'),
+            mode='lines+markers', marker=dict(size=5, color='#9B59B6')))
+        fig2.update_layout(
+            height=280, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(253,250,244,0.5)',
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+                        font=dict(size=11, color='#4A3728'), bgcolor='rgba(255,255,255,0.8)'),
+            xaxis=dict(tickfont=dict(color='#6B6040'), gridcolor='rgba(180,150,80,0.1)'),
+            yaxis=dict(tickfont=dict(color='#6B6040'), gridcolor='rgba(180,150,80,0.1)'),
+            margin=dict(l=10, r=10, t=40, b=10)
+        )
+        st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
+
+    with col_r:
+        section_header("🚨 Alertes prioritaires")
+        alertes = [
+            ("🔴", "CRITIQUE — B-07 : Varroa >3.8%. Traitement en cours, réévaluation requise sous 7 jours.", "alert-danger"),
+            ("🔴", "CRITIQUE — C-05 : Absence de reine suspectée. Inspection urgente nécessaire.", "alert-danger"),
+            ("🟠", "ATTENTION — A-08 : Varroa 2.1%, surveiller l'évolution.", "alert-warning"),
+            ("✅", "BIEN — D-02 : Colonie très forte (10 cadres). Essaimage probable dans 10–14 jours.", "alert-success"),
+            ("👑", "INFO — C-12 : Récolte de gelée royale programmée dans 3 jours.", "alert-royal"),
+        ]
+        for icon, txt, cls in alertes:
+            st.markdown(alert(icon, txt, cls), unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        section_header("🌤️ Conditions du rucher")
+        st.markdown("""
+        <div style="background:linear-gradient(135deg,#2D4A1E,#3D6B2C);border-radius:16px;padding:22px;color:white">
+            <div style="font-size:10px;opacity:0.6;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:8px">Aujourd'hui — Tlemcen</div>
+            <div style="font-family:'Playfair Display',serif;font-size:44px;font-weight:700;line-height:1">22°C</div>
+            <div style="font-size:14px;opacity:0.85;margin-top:4px">☀️ Ensoleillé — Excellent pour la miellée</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:18px;
+                        padding-top:16px;border-top:1px solid rgba(255,255,255,0.15)">
+                <div style="text-align:center">
+                    <div style="font-size:18px;font-weight:600">65%</div>
+                    <div style="font-size:10px;opacity:0.55;text-transform:uppercase;letter-spacing:0.06em">Humidité</div>
+                </div>
+                <div style="text-align:center">
+                    <div style="font-size:18px;font-weight:600">12 km/h</div>
+                    <div style="font-size:10px;opacity:0.55;text-transform:uppercase;letter-spacing:0.06em">Vent</div>
+                </div>
+                <div style="text-align:center">
+                    <div style="font-size:18px;font-weight:600">8/10</div>
+                    <div style="font-size:10px;opacity:0.55;text-transform:uppercase;letter-spacing:0.06em">Indice miellée</div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        section_header("🥧 Répartition du CA par produit")
+        fig_pie = go.Figure(go.Pie(
+            labels=["🍯 Miel", "🌼 Pollen", "👑 Gelée Royale"],
+            values=[ca_miel, ca_pollen, ca_gelee],
+            hole=0.55,
+            marker=dict(colors=["#D4820A","#F59E0B","#9B59B6"],
+                        line=dict(color='white', width=3)),
+            textfont=dict(size=12, color='#4A3728'),
+            hovertemplate="%{label}: %{value:,.0f} DA<extra></extra>"
+        ))
+        fig_pie.update_layout(
+            height=240, paper_bgcolor='rgba(0,0,0,0)',
+            showlegend=True,
+            legend=dict(font=dict(size=11, color='#4A3728'), bgcolor='rgba(0,0,0,0)'),
+            margin=dict(l=0, r=0, t=10, b=10),
+            annotations=[dict(text=f"{ca_total:,.0f}<br>DA", x=0.5, y=0.5,
+                              font=dict(size=13, color='#4A3728', family='Playfair Display'), showarrow=False)]
+        )
+        st.plotly_chart(fig_pie, use_container_width=True, config={"displayModeBar": False})
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    section_header("🏠 Aperçu des ruches", "Statut en temps réel · Double-clic pour détails")
+    cols = st.columns(4)
+    for i, (_, r) in enumerate(df.iterrows()):
+        with cols[i % 4]:
+            st.markdown(ruche_card_html(r), unsafe_allow_html=True)
+            st.markdown("<br>", unsafe_allow_html=True)
+
+# ─────────────────────────────────────────────
+# PAGE: RUCHES (inchangée, mais adaptée à 'gelee_g')
+# ─────────────────────────────────────────────
 elif current_page == "ruches":
     st.markdown('<div class="page-title">🏠 Gestion des Ruches</div>', unsafe_allow_html=True)
-    df = st.session_state.ruches
-    tab1, tab2, tab3 = st.tabs(["🃏 Cartes","📋 Tableau","➕ Nouvelle ruche"])
+    st.markdown('<div class="page-subtitle">Inventaire complet · Profils de production · Santé des colonies</div>', unsafe_allow_html=True)
+
+    tab1, tab2, tab3, tab4 = st.tabs(["🃏 Cartes ruches", "📋 Tableau détaillé", "📊 Analyses comparatives", "➕ Nouvelle ruche"])
+
     with tab1:
+        df = st.session_state.data["ruches"]
+        col_filter1, col_filter2, col_filter3 = st.columns(3)
+        with col_filter1:
+            f_statut = st.selectbox("Filtrer par statut", ["Tous","Excellent","Bon","Attention","Critique"])
+        with col_filter2:
+            f_profil = st.selectbox("Filtrer par profil", ["Tous","Miel","Pollen","Gelée Royale","Résistance"])
+        with col_filter3:
+            f_race = st.selectbox("Filtrer par race", ["Toutes"] + list(df["Race"].unique()))
+
+        filtered = df.copy()
+        if f_statut != "Tous": filtered = filtered[filtered["Statut"] == f_statut]
+        if f_profil != "Tous": filtered = filtered[filtered["Profil_prod"] == f_profil]
+        if f_race != "Toutes": filtered = filtered[filtered["Race"] == f_race]
+
         cols = st.columns(4)
-        for i,(_, r) in enumerate(df.iterrows()):
-            with cols[i%4]: st.markdown(ruche_card_html(r), unsafe_allow_html=True)
-    with tab2:
-        st.dataframe(df[["ID","Nom","Race","Site","Statut","Profil_prod","Poids_kg","Varroa_pct","Miel_kg","Pollen_kg","Gelée_g","VSH_pct"]],
-            use_container_width=True, hide_index=True,
-            column_config={"Varroa_pct":st.column_config.ProgressColumn(format="%.1f%%",min_value=0,max_value=5),
-                           "VSH_pct":st.column_config.ProgressColumn(format="%d%%",min_value=0,max_value=100)})
-    with tab3:
-        c1,c2 = st.columns(2)
-        with c1:
-            nid=st.text_input("Code ruche *",placeholder="E-01")
-            nnom=st.text_input("Nom *",placeholder="La Dorée")
-            nrace=st.selectbox("Race",["A. m. intermissa","A. m. sahariensis","A. m. ligustica","A. m. carnica","Hybride","Indéterminée"])
-            nsite=st.text_input("Site",placeholder="Verger du Cèdre")
-        with c2:
-            npoids=st.number_input("Poids initial (kg)",0.0,50.0,18.0,0.5)
-            nstatut=st.selectbox("Statut",["Excellent","Bon","Attention","Critique"])
-            nprofil=st.selectbox("Profil",["Miel","Pollen","Gelée Royale","Résistance"])
-        if st.button("✓ Enregistrer",type="primary"):
-            if not nid or not nnom: st.error("Renseignez le code et le nom.")
-            elif nid in df["ID"].values: st.error(f"ID {nid} existe déjà.")
-            else:
-                nr={"ID":nid,"Nom":nnom,"Race":nrace,"Site":nsite,"Poids_kg":npoids,"Varroa_pct":0.0,
-                    "Miel_kg":0,"Pollen_kg":0,"Gelée_g":0,"Statut":nstatut,"Reine_id":"À définir",
-                    "VSH_pct":70,"Douceur":80,"Economie_hiv":75,"Essaimage_pct":30,
-                    "Date_creation":str(datetime.now().date()),"Profil_prod":nprofil,
-                    "Glossa_mm":6.0,"L_aile_mm":9.2,"Ri":2.5,"Tomentum_pct":35,"Pigment_scutellum":5,"Ti_L_mm":3.0}
-                st.session_state.ruches=pd.concat([df,pd.DataFrame([nr])],ignore_index=True)
-                save_table("ruches", st.session_state.ruches)
-                st.success(f"✅ Ruche {nid} '{nnom}' créée et sauvegardée !"); st.balloons()
+        for i, (_, r) in enumerate(filtered.iterrows()):
+            with cols[i % 4]:
+                st.markdown(ruche_card_html(r), unsafe_allow_html=True)
+                if st.button("Voir détails", key=f"btn_ruche_{r['ID']}"):
+                    st.session_state["selected_ruche"] = r["ID"]
 
-elif current_page in ["miel","pollen","gelee","propolis"]:
-    TYPE_LABELS = {"miel":"🍯 Miel","pollen":"🌿 Pollen","gelee":"👑 Gelée Royale","propolis":"🟤 Propolis & Cire"}
-    TYPE_DB = {"miel":"miel","pollen":"pollen","gelee":"gelée_royale","propolis":"propolis"}
-    label = TYPE_LABELS[current_page]
-    db_type = TYPE_DB[current_page]
-    st.markdown(f'<div class="page-title">{label}</div>', unsafe_allow_html=True)
-    rec = st.session_state.recoltes
-    sub = rec[rec["Type"]==db_type]
-    total = sub["Quantite_kg"].sum()
-    ca = (sub["Quantite_kg"]*sub["Prix_kg"]).sum() if len(sub)>0 else 0
-    c1,c2 = st.columns(2)
-    with c1: st.metric(f"Total {label}", f"{total:.3f} kg ({total*1000:.0f}g)" if total<1 else f"{total:.2f} kg")
-    with c2: st.metric("Valeur estimée", f"{ca:,.0f} DA")
-    st.markdown("<br>", unsafe_allow_html=True)
-    section_header(f"Enregistrer une récolte — {label}")
-    c1,c2 = st.columns(2)
-    with c1:
-        r_date=st.date_input("Date",datetime.now(),key=f"r_date_{current_page}")
-        r_ruche=st.selectbox("Ruche",[f"{r['ID']} — {r['Nom']}" for _,r in st.session_state.ruches.iterrows()],key=f"r_ruche_{current_page}")
-        r_qt=st.number_input("Quantité (kg)",0.0,step=0.001 if current_page in ["gelee","propolis"] else 0.1,key=f"r_qt_{current_page}")
-    with c2:
-        r_prix=st.number_input("Prix (DA/kg)",0,step=100,key=f"r_prix_{current_page}")
-        r_notes=st.text_input("Notes",key=f"r_notes_{current_page}")
-    if st.button(f"✓ Enregistrer",type="primary",key=f"btn_{current_page}"):
-        nr={"Date":str(r_date),"Ruche":r_ruche.split("—")[0].strip(),"Type":db_type,
-            "Produit":label,"Quantite_kg":r_qt,"Humidite_pct":None,"Prix_kg":r_prix}
-        st.session_state.recoltes=pd.concat([rec,pd.DataFrame([nr])],ignore_index=True)
-        save_table("recoltes", st.session_state.recoltes)
-        st.success(f"✅ Récolte de {r_qt} kg enregistrée et sauvegardée !")
-    if len(sub)>0:
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.dataframe(sub.sort_values("Date",ascending=False),use_container_width=True,hide_index=True)
-
-elif current_page == "caracterisation":
-    st.markdown('<div class="page-title">📐 Caractérisation des Abeilles</div>', unsafe_allow_html=True)
-    df = st.session_state.ruches
-    tab1, tab2 = st.tabs(["🎯 Profils production","👅 Langue & Ailes"])
-    with tab1:
-        section_header("📊 Tableau de caractérisation comparatif")
-        car_df = pd.DataFrame({
-            "Sous-espèce":["A. m. intermissa","A. m. sahariensis","A. m. ligustica","A. m. carnica","A. m. caucasica"],
-            "Glossa (mm)":["5.9–6.3","5.8–6.2","6.3–6.7","6.4–6.8","6.7–7.1"],
-            "Indice cub.":["2.0–2.8","2.1–2.9","2.4–3.2","2.6–3.5","1.9–2.5"],
-            "Pigmentation":["4–7 sombre","5–8 très sombre","1–3 claire","1–3 grise","1–4 variable"],
-            "Profil prod.":["Miel/Pollen","Pollen","Gelée R./Miel","Pollen/Miel","Propolis/Miel"],
-            "VSH moyen":["75%","68%","62%","78%","65%"],
-            "Adaptation":["Maghreb","Déserts arides","Europe mérid.","Europe centr.","Caucase"],
-        })
-        st.dataframe(car_df, use_container_width=True, hide_index=True)
-    with tab2:
-        fig_gl = go.Figure()
-        for race in df["Race"].unique():
-            sub_r = df[df["Race"]==race]
-            col = {"A. m. intermissa":"#C97A08","A. m. sahariensis":"#9333ea","A. m. ligustica":"#3b82f6","A. m. carnica":"#22c55e","Hybride":"#6b7280"}.get(race,"#6b7280")
-            fig_gl.add_trace(go.Box(y=sub_r["Glossa_mm"],name=race[:15],marker_color=col,boxmean=True))
-        fig_gl.update_layout(height=320,paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(253,250,243,0.5)",
-            yaxis=dict(title="Glossa (mm)",tickfont=dict(color="#655E40"),gridcolor="rgba(180,150,80,0.1)"),
-            margin=dict(l=10,r=10,t=10,b=10))
-        st.plotly_chart(fig_gl, use_container_width=True, config={"displayModeBar":False})
-
-elif current_page == "alertes":
-    st.markdown('<div class="page-title">🚨 Alertes & Notifications</div>', unsafe_allow_html=True)
-    df = st.session_state.ruches
-    for _,r in df.iterrows():
-        if r["Varroa_pct"]>3:
-            st.markdown(alert("🚨",f"<strong>CRITIQUE — {r['Nom']} ({r['ID']}) :</strong> Varroa {r['Varroa_pct']}% → Traitement urgent.","al-danger"), unsafe_allow_html=True)
-        elif r["Varroa_pct"]>2:
-            st.markdown(alert("⚠️",f"<strong>ATTENTION — {r['Nom']} ({r['ID']}) :</strong> Varroa {r['Varroa_pct']}% → Surveiller.","al-warning"), unsafe_allow_html=True)
-        if r["Statut"]=="Critique":
-            st.markdown(alert("🔴",f"<strong>CRITIQUE — {r['Nom']} :</strong> Inspection urgente requise.","al-danger"), unsafe_allow_html=True)
-    st.markdown(alert("✅","Toutes les alertes critiques ont été vérifiées ce matin.","al-success"), unsafe_allow_html=True)
-
-elif current_page == "rapports":
-    st.markdown('<div class="page-title">📋 Rapports & Exports CSV</div>', unsafe_allow_html=True)
-    st.markdown('<div class="page-sub">Exportez vos données — allez dans <strong>💾 Données & Sauvegardes</strong> pour les sauvegardes complètes</div>', unsafe_allow_html=True)
-    exports = [
-        ("📊","Ruches",st.session_state.ruches,"ruches"),
-        ("🔬","Morphométrie",st.session_state.morph_analyses,"morpho_analyses"),
-        ("🍯","Récoltes",st.session_state.recoltes,"recoltes"),
-        ("💊","Traitements",st.session_state.traitements,"traitements"),
-        ("🔍","Inspections",st.session_state.inspections,"inspections"),
-        ("📦","Stock",st.session_state.stock,"stock"),
-        ("🧬","Génétique",st.session_state.genetique,"genetique"),
-        ("🚨","Alertes",st.session_state.alertes_db,"alertes"),
-    ]
-    cols = st.columns(4)
-    for i,(icon,title,data,tname) in enumerate(exports):
-        with cols[i%4]:
-            nb = len(data) if isinstance(data, pd.DataFrame) else 0
-            st.markdown(f'<div style="background:white;border-radius:14px;padding:16px;text-align:center;border:1px solid rgba(180,150,80,0.2);margin-bottom:12px"><div style="font-size:28px;margin-bottom:7px">{icon}</div><div style="font-weight:600;font-size:13.5px;margin-bottom:3px">{title}</div><div style="font-size:11px;color:var(--muted)">{nb} lignes</div></div>', unsafe_allow_html=True)
-            csv_b, fname = export_table_csv(tname)
-            st.download_button(f"⬇ CSV", csv_b, fname, "text/csv", use_container_width=True, key=f"dl_{tname}")
-    st.markdown("<br>", unsafe_allow_html=True)
-    section_header("⬇ Exporter TOUT en un ZIP")
-    zip_bytes = export_all_csv_zip()
-    st.download_button("⬇ Télécharger tout (ZIP)", zip_bytes,
-        f"apitrack_export_{datetime.now().strftime('%Y%m%d_%H%M')}.zip",
-        "application/zip", use_container_width=False)
-
-# ══════════════════════════════════════════════════════════════════════════════
-# PAGE : DONNÉES & SAUVEGARDES (CŒUR DE LA PERSISTANCE)
-# ══════════════════════════════════════════════════════════════════════════════
-elif current_page == "donnees":
-    st.markdown('<div class="page-title">💾 Données & Sauvegardes</div>', unsafe_allow_html=True)
-    st.markdown('<div class="page-sub">Vos données sont enregistrées en permanence dans le dossier <code>apitrack_data/</code> · Elles survivent à l\'extinction du PC et du smartphone</div>', unsafe_allow_html=True)
-
-    # ── Statut du dossier de données ──────────────────────────────────────────
-    stats = get_storage_stats()
-    cfg = load_config()
-
-    st.markdown(f"""
-    <div style="background:linear-gradient(135deg,var(--forest),var(--forest-mid));border-radius:18px;padding:22px;color:white;margin-bottom:20px">
-      <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
-        <div style="font-size:36px">💾</div>
-        <div>
-          <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:#F2C14E">Dossier de données ApiTrack Pro</div>
-          <div style="font-size:12px;opacity:.75;margin-top:3px;font-family:'JetBrains Mono',monospace">{stats['dossier']}</div>
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.15)">
-        <div style="text-align:center"><div style="font-size:22px;font-weight:700;color:#F2C14E">{sum(t['nb'] for t in stats['tables'].values())}</div><div style="font-size:10px;opacity:.6;text-transform:uppercase;letter-spacing:.08em">Enregistrements total</div></div>
-        <div style="text-align:center"><div style="font-size:22px;font-weight:700;color:#F2C14E">{stats['taille_totale_kb']:.1f} Ko</div><div style="font-size:10px;opacity:.6;text-transform:uppercase;letter-spacing:.08em">Taille sur disque</div></div>
-        <div style="text-align:center"><div style="font-size:22px;font-weight:700;color:#F2C14E">{stats['nb_sauvegardes']}</div><div style="font-size:10px;opacity:.6;text-transform:uppercase;letter-spacing:.08em">Sauvegardes ZIP</div></div>
-        <div style="text-align:center"><div style="font-size:13px;font-weight:600;color:#F2C14E">{stats['derniere_sauvegarde'][:10] if stats['derniere_sauvegarde'] and stats['derniere_sauvegarde'] != 'Jamais' else 'Jamais'}</div><div style="font-size:10px;opacity:.6;text-transform:uppercase;letter-spacing:.08em">Dernière sauvegarde</div></div>
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # ── 3 onglets principaux ──────────────────────────────────────────────────
-    tab_bkp, tab_rest, tab_imp, tab_cfg = st.tabs([
-        "💾 Sauvegarder", "🔄 Restaurer", "📥 Importer CSV", "⚙️ Paramètres"
-    ])
-
-    # ════ ONGLET 1 : SAUVEGARDER ═══════════════════════════════════════════
-    with tab_bkp:
-        st.markdown(alert("💾", """<strong>Sauvegarde = 1 fichier ZIP</strong> contenant tous vos CSV. 
-            Stockez ce ZIP sur clé USB, Google Drive, WhatsApp (envoyez-le à vous-même), ou par email. 
-            La sauvegarde automatique crée un ZIP chaque jour dans <code>apitrack_data/sauvegardes/</code>.""", "al-info"), unsafe_allow_html=True)
-
-        c_left, c_right = st.columns([2, 1])
-        with c_left:
-            section_header("📦 Créer une sauvegarde maintenant")
-            bkp_label = st.text_input("Étiquette de la sauvegarde (optionnel)", placeholder="Ex: avant_traitement_varroa, fin_saison_2025…")
-            col_b1, col_b2 = st.columns(2)
-            with col_b1:
-                if st.button("💾 Créer sauvegarde ZIP", type="primary", use_container_width=True):
-                    with st.spinner("Sauvegarde en cours…"):
-                        # D'abord sauvegarder les données en mémoire sur disque
-                        save_state()
-                        ok, zip_path, zip_name = create_backup(bkp_label)
-                    if ok:
-                        st.success(f"✅ Sauvegarde créée : **{zip_name}**")
-                        zip_bytes = get_backup_zip_bytes(zip_path)
-                        st.download_button(
-                            "⬇ Télécharger maintenant",
-                            zip_bytes, zip_name, "application/zip",
-                            use_container_width=True, key="dl_new_backup"
-                        )
-                    else:
-                        st.error(f"❌ Erreur : {zip_path}")
-            with col_b2:
-                if st.button("💾 Forcer sauvegarde disque", use_container_width=True,
-                             help="Sauvegarde immédiate des données en mémoire vers les fichiers CSV"):
-                    save_state()
-                    st.success("✅ Données sauvegardées sur disque !")
-
-        with c_right:
-            # État des tables
-            section_header("📊 État des tables")
-            for name, tinfo in stats["tables"].items():
-                icons = {"ruches":"🏠","inspections":"🔍","recoltes":"🍯","traitements":"💊",
-                         "morpho_analyses":"🔬","stock":"📦","genetique":"🧬","alertes":"🚨"}
-                ico = icons.get(name,"📄")
-                st.markdown(f"""<div style="display:flex;align-items:center;justify-content:space-between;
-                    padding:7px 10px;background:white;border-radius:9px;margin-bottom:5px;
-                    border:1px solid rgba(180,150,80,0.15);font-size:12.5px">
-                    <span>{ico} {name}</span>
-                    <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)">{tinfo['nb']} lignes · {tinfo['taille_kb']} Ko</span>
-                </div>""", unsafe_allow_html=True)
-
-        # ── Historique des sauvegardes ──
-        st.markdown("<br>", unsafe_allow_html=True)
-        section_header("🗂 Historique des sauvegardes")
-        backups = list_backups()
-        if not backups:
-            st.info("Aucune sauvegarde pour l'instant. Créez-en une ci-dessus !")
-        else:
-            for i, bk in enumerate(backups):
-                c_i, c_n, c_d, c_s, c_dl = st.columns([0.5, 3, 2, 1.5, 1.5])
-                with c_i:
-                    badge_col = "b-green" if i == 0 else "b-gray"
-                    st.markdown(f'<span class="badge {badge_col}" style="font-size:10px">{"Récente" if i==0 else f"#{i+1}"}</span>', unsafe_allow_html=True)
-                with c_n:
-                    st.markdown(f'<div style="font-family:JetBrains Mono,monospace;font-size:12px;color:var(--text);padding:6px 0">{bk["nom"]}</div>', unsafe_allow_html=True)
-                with c_d:
-                    st.markdown(f'<div style="font-size:12px;color:var(--muted);padding:6px 0">{bk["date"]}</div>', unsafe_allow_html=True)
-                with c_s:
-                    st.markdown(f'<div style="font-size:12px;color:var(--muted);padding:6px 0">{bk["taille"]}</div>', unsafe_allow_html=True)
-                with c_dl:
-                    zip_b = get_backup_zip_bytes(bk["chemin"])
-                    st.download_button("⬇", zip_b, bk["nom"], "application/zip",
-                        key=f"dl_bk_{i}", use_container_width=True)
-
-    # ════ ONGLET 2 : RESTAURER ═══════════════════════════════════════════════
-    with tab_rest:
-        st.markdown(alert("🔄", """<strong>Restauration :</strong> Rechargez vos données depuis une sauvegarde ZIP. 
-            Une sauvegarde automatique de sécurité est créée AVANT toute restauration. 
-            Vous pouvez restaurer depuis une sauvegarde locale OU un fichier ZIP uploadé (depuis une autre machine ou un cloud).""", "al-warning"), unsafe_allow_html=True)
-
-        c_l, c_r = st.columns(2)
-
-        with c_l:
-            section_header("🗂 Restaurer depuis une sauvegarde locale")
-            backups = list_backups()
-            if not backups:
-                st.info("Aucune sauvegarde locale disponible.")
-            else:
-                bk_names = [f"{b['date']} — {b['nom']} ({b['taille']})" for b in backups]
-                selected_bk = st.selectbox("Choisir une sauvegarde", bk_names)
-                bk_idx = bk_names.index(selected_bk)
-                bk_chosen = backups[bk_idx]
-
+        if "selected_ruche" in st.session_state:
+            rid = st.session_state["selected_ruche"]
+            row = df[df["ID"]==rid].iloc[0]
+            st.markdown("---")
+            st.markdown(f'<div class="section-header">🔍 Détail — {row["Nom"]} ({rid})</div>', unsafe_allow_html=True)
+            dc1, dc2 = st.columns([2, 1])
+            with dc1:
                 st.markdown(f"""
-                <div style="background:var(--wax);border-radius:10px;padding:12px;font-size:12.5px;margin:10px 0">
-                  <div>📅 <strong>Date :</strong> {bk_chosen['date']}</div>
-                  <div>📦 <strong>Fichier :</strong> {bk_chosen['nom']}</div>
-                  <div>💾 <strong>Taille :</strong> {bk_chosen['taille']}</div>
-                </div>""", unsafe_allow_html=True)
+                <div class="morph-card">
+                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:16px">
+                        <div><div style="font-size:11px;color:#6B6040;text-transform:uppercase;letter-spacing:0.07em">Race</div>
+                             <div style="font-weight:600;margin-top:3px">{row['Race']}</div></div>
+                        <div><div style="font-size:11px;color:#6B6040;text-transform:uppercase;letter-spacing:0.07em">Site</div>
+                             <div style="font-weight:600;margin-top:3px">{row['Site']}</div></div>
+                        <div><div style="font-size:11px;color:#6B6040;text-transform:uppercase;letter-spacing:0.07em">Reine</div>
+                             <div style="font-weight:600;margin-top:3px;font-family:JetBrains Mono,monospace;font-size:12px">{row['Reine_id']}</div></div>
+                        <div><div style="font-size:11px;color:#6B6040;text-transform:uppercase;letter-spacing:0.07em">Création</div>
+                             <div style="font-weight:600;margin-top:3px">{row['Date_creation']}</div></div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
+                        <div><div style="font-size:11px;color:#6B6040;text-transform:uppercase;letter-spacing:0.07em">🍯 Miel</div>
+                             <div style="font-weight:700;font-size:18px;color:#D4820A;margin-top:3px">{row['Miel_kg']} kg</div></div>
+                        <div><div style="font-size:11px;color:#6B6040;text-transform:uppercase;letter-spacing:0.07em">🌼 Pollen</div>
+                             <div style="font-weight:700;font-size:18px;color:#F59E0B;margin-top:3px">{row['Pollen_kg']} kg</div></div>
+                        <div><div style="font-size:11px;color:#6B6040;text-transform:uppercase;letter-spacing:0.07em">👑 Gelée R.</div>
+                             <div style="font-weight:700;font-size:18px;color:#9B59B6;margin-top:3px">{row['gelee_g']} g</div></div>
+                        <div><div style="font-size:11px;color:#6B6040;text-transform:uppercase;letter-spacing:0.07em">🛡️ VSH</div>
+                             <div style="font-weight:700;font-size:18px;color:#22C55E;margin-top:3px">{row['VSH_pct']}%</div></div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            with dc2:
+                st.plotly_chart(production_radar(row), use_container_width=True, config={"displayModeBar":False})
 
-                confirm_local = st.checkbox("Je confirme vouloir restaurer ces données (les données actuelles seront remplacées)", key="confirm_local")
-                if st.button("🔄 Restaurer cette sauvegarde", type="primary", disabled=not confirm_local):
-                    with st.spinner("Restauration en cours…"):
-                        ok, msg = restore_backup(bk_chosen["chemin"])
-                    if ok:
-                        reload_state()
-                        st.success(f"✅ {msg}")
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        st.error(f"❌ {msg}")
+    with tab2:
+        df = st.session_state.data["ruches"]
+        display_cols = ["ID","Nom","Race","Site","Statut","Profil_prod","Poids_kg","Varroa_pct","Miel_kg","Pollen_kg","gelee_g","VSH_pct"]
+        st.dataframe(
+            df[display_cols].rename(columns={"Profil_prod":"Profil","Varroa_pct":"Varroa %",
+                "Miel_kg":"Miel (kg)","Pollen_kg":"Pollen (kg)","gelee_g":"Gelée (g)","VSH_pct":"VSH %"}),
+            use_container_width=True, hide_index=True,
+            column_config={
+                "Statut": st.column_config.SelectboxColumn(options=["Excellent","Bon","Attention","Critique"]),
+                "Varroa %": st.column_config.ProgressColumn(format="%.1f%%", min_value=0, max_value=5),
+                "Miel (kg)": st.column_config.NumberColumn(format="%.1f kg"),
+                "VSH %": st.column_config.ProgressColumn(format="%d%%", min_value=0, max_value=100),
+            }
+        )
+        st.markdown("#### Supprimer une ruche")
+        del_id = st.selectbox("Choisir l'ID de la ruche à supprimer", df["ID"].tolist())
+        if st.button("🗑 Supprimer cette ruche", type="primary"):
+            delete_ruche(del_id)
+            st.session_state.data = load_dataframes()
+            st.success(f"Ruche {del_id} supprimée.")
+            st.rerun()
 
-        with c_r:
-            section_header("📤 Restaurer depuis un fichier uploadé")
-            st.markdown('<div style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Uploadez un fichier ZIP d\'ApiTrack Pro depuis votre téléphone, clé USB, Google Drive, email…</div>', unsafe_allow_html=True)
-            uploaded_zip = st.file_uploader("Fichier de sauvegarde (.zip)", type=["zip"], key="restore_upload")
-            if uploaded_zip:
-                st.markdown(f"""<div style="background:var(--forest-pale);border-radius:10px;padding:12px;font-size:12.5px;margin:10px 0">
-                  <div>📦 <strong>{uploaded_zip.name}</strong></div>
-                  <div>💾 {uploaded_zip.size/1024:.1f} Ko</div></div>""", unsafe_allow_html=True)
-                confirm_up = st.checkbox("Je confirme la restauration depuis ce fichier", key="confirm_up")
-                if st.button("🔄 Restaurer ce fichier", type="primary", disabled=not confirm_up):
-                    with st.spinner("Restauration en cours…"):
-                        ok, msg = restore_from_upload(uploaded_zip.read())
-                    if ok:
-                        reload_state()
-                        st.success(f"✅ {msg}")
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        st.error(f"❌ {msg}")
+    with tab3:
+        df = st.session_state.data["ruches"]
+        section_header("📊 Comparaison des productions")
 
-    # ════ ONGLET 3 : IMPORTER CSV ════════════════════════════════════════════
-    with tab_imp:
-        st.markdown(alert("📥", """<strong>Import CSV :</strong> Importez des données depuis un fichier CSV exporté précédemment, 
-            depuis une autre application apicole ou créé à la main dans Excel. 
-            Les nouveaux enregistrements sont <strong>ajoutés</strong> sans écraser les données existantes.""", "al-info"), unsafe_allow_html=True)
+        fig_comp = go.Figure()
+        fig_comp.add_trace(go.Bar(x=df["ID"], y=df["Miel_kg"], name="🍯 Miel (kg)",
+            marker_color='#D4820A', text=df["Miel_kg"], textposition='outside'))
+        fig_comp.add_trace(go.Bar(x=df["ID"], y=df["Pollen_kg"]*5, name="🌼 Pollen (kg×5)",
+            marker_color='#F59E0B', text=df["Pollen_kg"], textposition='outside'))
+        fig_comp.add_trace(go.Bar(x=df["ID"], y=df["gelee_g"]/10, name="👑 Gelée (g/10)",
+            marker_color='#9B59B6', text=df["gelee_g"].astype(str)+"g", textposition='outside'))
+        fig_comp.update_layout(
+            barmode='group', height=360,
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(253,250,244,0.5)',
+            xaxis=dict(tickfont=dict(color='#4A3728'), gridcolor='rgba(180,150,80,0.1)'),
+            yaxis=dict(tickfont=dict(color='#6B6040'), gridcolor='rgba(180,150,80,0.1)', title="Quantité normalisée"),
+            legend=dict(font=dict(size=11), bgcolor='rgba(255,255,255,0.8)'),
+            margin=dict(l=10, r=10, t=30, b=10)
+        )
+        st.plotly_chart(fig_comp, use_container_width=True, config={"displayModeBar":False})
 
-        table_labels = {
-            "ruches":"🏠 Ruches","inspections":"🔍 Inspections","recoltes":"🍯 Récoltes",
-            "traitements":"💊 Traitements","morpho_analyses":"🔬 Morphométrie",
-            "stock":"📦 Stock","genetique":"🧬 Génétique","alertes":"🚨 Alertes"
-        }
-        tbl_choice = st.selectbox("Table à importer", list(table_labels.values()))
-        tbl_key = [k for k,v in table_labels.items() if v == tbl_choice][0]
+        section_header("🎯 Score global par ruche")
+        df["Score"] = (df["Miel_kg"]/20*25 + df["Pollen_kg"]/5*15 + df["gelee_g"]/200*15 +
+                       df["VSH_pct"]/100*25 + df["Douceur"]/100*10 + df["Economie_hiv"]/100*10).clip(0,100)
+        fig_score = go.Figure(go.Bar(
+            x=df["Score"].round(1), y=df["Nom"], orientation='h',
+            marker=dict(color=df["Score"],colorscale=[[0,'#fee2e2'],[0.5,'#fef9c3'],[1,'#dcfce7']],
+                        line=dict(color='white',width=1)),
+            text=[f"{s:.0f}/100" for s in df["Score"]], textposition='inside',
+            textfont=dict(color='#1E1A0F', size=12, family='JetBrains Mono')
+        ))
+        fig_score.update_layout(
+            height=300, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(253,250,244,0.5)',
+            xaxis=dict(range=[0,105], tickfont=dict(color='#6B6040')),
+            yaxis=dict(tickfont=dict(color='#4A3728', size=12)),
+            margin=dict(l=10, r=10, t=10, b=10)
+        )
+        st.plotly_chart(fig_score, use_container_width=True, config={"displayModeBar":False})
 
-        csv_file = st.file_uploader(f"Fichier CSV pour : {tbl_choice}", type=["csv"], key=f"imp_{tbl_key}")
-        if csv_file:
-            try:
-                df_preview = pd.read_csv(csv_file, encoding="utf-8-sig", nrows=5)
-                st.markdown(f"**Aperçu (5 premières lignes) — {len(df_preview.columns)} colonnes :**")
-                st.dataframe(df_preview, use_container_width=True, hide_index=True)
-                csv_file.seek(0)
-                if st.button(f"📥 Importer dans {tbl_choice}", type="primary"):
-                    ok, msg, nb = import_csv(tbl_key, csv_file.read())
-                    if ok:
-                        # Recharger la table dans session_state
-                        table_attr = {"ruches":"ruches","inspections":"inspections",
-                                      "recoltes":"recoltes","traitements":"traitements",
-                                      "morpho_analyses":"morph_analyses","stock":"stock",
-                                      "genetique":"genetique","alertes":"alertes_db"}
-                        attr = table_attr.get(tbl_key)
-                        if attr:
-                            st.session_state[attr] = load_table(tbl_key)
-                        st.success(f"✅ {msg}")
-                    else:
-                        st.error(f"❌ {msg}")
-            except Exception as e:
-                st.error(f"Impossible de lire le fichier : {e}")
-
-    # ════ ONGLET 4 : PARAMÈTRES ══════════════════════════════════════════════
-    with tab_cfg:
-        section_header("⚙️ Paramètres du rucher")
+    with tab4:
+        st.markdown('<div class="section-header">Enregistrer une nouvelle ruche</div>', unsafe_allow_html=True)
         c1, c2 = st.columns(2)
         with c1:
-            new_nom = st.text_input("Nom de l'apiculteur", value=cfg.get("apiculteur",""))
-            new_rucher = st.text_input("Nom du rucher", value=cfg.get("rucher",""))
-            new_region = st.text_input("Région", value=cfg.get("region",""))
+            nid = st.text_input("Identifiant ruche *", placeholder="Ex : E-01")
+            nnom = st.text_input("Nom de la ruche *", placeholder="Ex : La Dorée")
+            nrace = st.selectbox("Race (sous-espèce)", ["A. m. intermissa","A. m. sahariensis","A. m. ligustica","A. m. carnica","Hybride","Indéterminée"])
+            nsite = st.text_input("Site / Rucher", placeholder="Ex : Verger du Cèdre")
+            nprofil = st.selectbox("Profil de production", ["Miel","Pollen","Gelée Royale","Résistance"])
         with c2:
-            new_auto = st.checkbox("Sauvegarde automatique quotidienne", value=cfg.get("sauvegarde_auto", True))
-            new_max = st.number_input("Nombre max de sauvegardes à conserver", min_value=5, max_value=365, value=int(cfg.get("nb_sauvegardes_max", 30)))
-        if st.button("✅ Sauvegarder les paramètres", type="primary"):
-            cfg.update({"apiculteur":new_nom,"rucher":new_rucher,"region":new_region,
-                        "sauvegarde_auto":new_auto,"nb_sauvegardes_max":new_max})
-            save_config(cfg)
-            st.session_state._config = cfg
-            st.success("✅ Paramètres enregistrés !")
+            ndate = st.date_input("Date de création", value=datetime.now())
+            ntype = st.selectbox("Type de ruche", ["Dadant 10 cadres","Langstroth","Warré","Top-bar","Traditionnel"])
+            npoids = st.number_input("Poids initial (kg)", min_value=0.0, value=18.0, step=0.5)
+            nstatut = st.selectbox("Statut initial", ["Excellent","Bon","Attention","Critique"])
+            nreine = st.text_input("ID Reine", placeholder="Ex : R-2025-01")
+        nnotes = st.text_area("Observations initiales", placeholder="Notes sur la colonie, l'environnement…")
 
-        st.markdown("<br>", unsafe_allow_html=True)
-        section_header("🗑 Zone dangereuse")
-        st.markdown(alert("⚠️", "Les actions ci-dessous sont irréversibles. Créez d'abord une sauvegarde.", "al-warning"), unsafe_allow_html=True)
-        col_d1, col_d2 = st.columns(2)
-        with col_d1:
-            if st.button("🗑 Supprimer toutes les sauvegardes", use_container_width=True):
-                confirm_del = st.checkbox("Confirmer la suppression de toutes les sauvegardes ZIP", key="del_bkp_confirm")
-                if confirm_del:
-                    import glob
-                    for f in (DATA_DIR / "sauvegardes").glob("*.zip"):
-                        f.unlink()
-                    st.success("Sauvegardes supprimées.")
-        with col_d2:
-            st.markdown('<span style="font-size:12px;color:var(--muted)">Pour réinitialiser les données : supprimez manuellement le dossier <code>apitrack_data/</code> et redémarrez l\'application.</span>', unsafe_allow_html=True)
+        if st.button("✓ Enregistrer la ruche", type="primary"):
+            if not nid or not nnom:
+                st.error("Renseignez l'identifiant et le nom.")
+            elif nid in st.session_state.data["ruches"]["ID"].values:
+                st.error(f"L'ID {nid} existe déjà.")
+            else:
+                new_row = {
+                    "ID": nid,
+                    "Nom": nnom,
+                    "Race": nrace,
+                    "Site": nsite,
+                    "Poids_kg": npoids,
+                    "Varroa_pct": 0.0,
+                    "Miel_kg": 0,
+                    "Pollen_kg": 0,
+                    "gelee_g": 0,
+                    "Statut": nstatut,
+                    "Reine_id": nreine if nreine else "À définir",
+                    "VSH_pct": 70,
+                    "Douceur": 80,
+                    "Economie_hiv": 75,
+                    "Essaimage_pct": 30,
+                    "Date_creation": str(ndate),
+                    "Cadres_couverts": 0,
+                    "Cadres_couvain": 0,
+                    "Temp_int": 35.0,
+                    "Profil_prod": nprofil,
+                    "Glossa_mm": 6.0,
+                    "L_aile_mm": 9.2,
+                    "Ri": 2.5,
+                    "Tomentum_pct": 35,
+                    "Pigment_scutellum": 5,
+                    "Ti_L_mm": 3.0
+                }
+                add_ruche(new_row)
+                st.session_state.data = load_dataframes()
+                st.success(f"✅ Ruche {nid} « {nnom} » enregistrée avec succès !")
+                st.balloons()
 
-elif current_page in ["inspections","traitements","flore","meteo","genetique","inventaire"]:
-    titles = {"inspections":"🔍 Inspections","traitements":"💊 Traitements",
-              "flore":"🌸 Flore Mellifère","meteo":"🌤️ Météo & Miellée",
-              "genetique":"🧬 Génétique & Races","inventaire":"📦 Inventaire"}
-    st.markdown(f'<div class="page-title">{titles[current_page]}</div>', unsafe_allow_html=True)
-    st.info("Cette section est disponible. Explorez d'abord la page **🔬 Morphométrie IA** qui est le cœur de cette version.")
+# ─────────────────────────────────────────────
+# PAGE: INSPECTIONS (inchangée)
+# ─────────────────────────────────────────────
+elif current_page == "inspections":
+    st.markdown('<div class="page-title">🔍 Inspections</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Journal de terrain · Suivi sanitaire · Historique complet</div>', unsafe_allow_html=True)
 
-# =====================================================
+    tab1, tab2 = st.tabs(["📋 Nouvelle inspection", "📅 Historique"])
+
+    with tab1:
+        c1, c2 = st.columns(2)
+        with c1:
+            ruche_ids = st.session_state.data["ruches"]["ID"].tolist()
+            ruche_noms = [f"{r['ID']} — {r['Nom']}" for _, r in st.session_state.data["ruches"].iterrows()]
+            insp_ruche = st.selectbox("Ruche inspectée *", ruche_noms)
+            insp_date = st.date_input("Date d'inspection *", value=datetime.now())
+            insp_poids = st.number_input("Poids pesée (kg)", min_value=0.0, value=20.0, step=0.1)
+            insp_temp = st.number_input("Température intérieure (°C)", min_value=0.0, value=35.0, step=0.1)
+            insp_cadres = st.slider("Cadres couverts de population", 0, 10, 7)
+            insp_couvain = st.slider("Cadres de couvain", 0, 10, 5)
+        with c2:
+            insp_reine = st.selectbox("Présence reine", ["Observée","Non observée (ponte présente)","Absente"])
+            insp_varroa = st.selectbox("Niveau varroa", ["Aucune visible","Faible (<1%)","Modérée (1–3%)","Élevée (>3%)"])
+            insp_reserves = st.selectbox("Réserves de miel", ["Excellentes (>15 kg)","Bonnes (8–15 kg)","Faibles (3–8 kg)","Insuffisantes (<3 kg)"])
+            insp_comportement = st.selectbox("Comportement", ["Calme","Nerveux","Agressif"])
+            insp_maladie = st.multiselect("Signes de maladie", ["Aucun","Loque américaine","Loque européenne","Nosémose","Teigne","Sacbrood"])
+            insp_notif = st.selectbox("Statut général", ["Excellent","Bon","Attention","Critique"])
+        insp_notes = st.text_area("Observations détaillées", placeholder="Couvain sain, pas de maladie apparente, bonne ponte de la reine…", height=100)
+
+        if st.button("✓ Enregistrer l'inspection", type="primary"):
+            new_insp = {
+                "Date": str(insp_date),
+                "Ruche": insp_ruche.split("—")[0].strip(),
+                "Poids_kg": insp_poids,
+                "Cadres_couverts": insp_cadres,
+                "Varroa": insp_varroa,
+                "Reine": insp_reine,
+                "Comportement": insp_comportement,
+                "Notes": insp_notes
+            }
+            add_inspection(new_insp)
+            st.session_state.data = load_dataframes()
+            st.success("✅ Inspection enregistrée avec succès !")
+
+    with tab2:
+        df_insp = st.session_state.data["inspections"].sort_values("Date", ascending=False)
+        st.markdown('<div class="section-header">📅 Journal chronologique</div>', unsafe_allow_html=True)
+        for _, row in df_insp.iterrows():
+            varroa_icon = "🔴" if "Élevée" in str(row.get("Varroa","")) else "🟡" if "Modérée" in str(row.get("Varroa","")) else "🟢"
+            st.markdown(f"""
+            <div class="timeline-item">
+                <div class="timeline-date">{row['Date']} — Ruche {row['Ruche']}</div>
+                <div class="timeline-event">{varroa_icon} {row.get('Comportement','—')} · Poids : {row['Poids_kg']} kg</div>
+                <div class="timeline-note">{row.get('Notes','—')}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+# ─────────────────────────────────────────────
+# PAGE: TRAITEMENTS (inchangée)
+# ─────────────────────────────────────────────
+elif current_page == "traitements":
+    st.markdown('<div class="page-title">💊 Traitements Vétérinaires</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Conformité réglementaire · Suivi anti-varroa · Historique médicamenteux</div>', unsafe_allow_html=True)
+
+    st.markdown(alert("ℹ️", "Consigner tous les traitements vétérinaires est obligatoire. Les données sont exportables pour conformité réglementaire (Directive EU 2001/82/CE, code algérien de l'apiculture).", "alert-info"), unsafe_allow_html=True)
+
+    tab1, tab2 = st.tabs(["💊 Enregistrer traitement", "📊 Suivi en cours"])
+    with tab1:
+        c1, c2 = st.columns(2)
+        with c1:
+            t_ruche = st.selectbox("Ruche(s) traitée(s)", ["Toutes les ruches"] + st.session_state.data["ruches"]["ID"].tolist())
+            t_date = st.date_input("Date de début", value=datetime.now())
+            t_produit = st.selectbox("Produit utilisé", ["Acide oxalique","Acide formique","Apivar (amitraz)","Apiguard (thymol)","Thymovar","CheckMite+ (coumaphos)","Autre"])
+            t_patho = st.selectbox("Pathologie ciblée", ["Varroa destructor","Loque américaine","Loque européenne","Nosémose","Teigne de la cire","Autre"])
+        with c2:
+            t_dose = st.text_input("Dose appliquée", placeholder="Ex : 5 ml / ruche")
+            t_duree = st.number_input("Durée (jours)", min_value=1, value=21)
+            t_methode = st.selectbox("Méthode d'application", ["Sublimation","Lanière","Vaporisation","Nourrissement","Autre"])
+            t_temp = st.number_input("Température extérieure (°C)", min_value=-10, max_value=50, value=18)
+        t_notes = st.text_area("Observations", placeholder="Conditions d'application, état des colonies…")
+
+        if st.button("✓ Enregistrer le traitement", type="primary"):
+            new_t = {
+                "Date_debut": str(t_date),
+                "Ruche": t_ruche,
+                "Produit": t_produit,
+                "Pathologie": t_patho,
+                "Dose": t_dose,
+                "Duree_j": t_duree,
+                "Statut": "En cours",
+                "Progression_pct": 0
+            }
+            add_traitement(new_t)
+            st.session_state.data = load_dataframes()
+            st.success("✅ Traitement enregistré !")
+
+    with tab2:
+        for _, t in st.session_state.data["traitements"].iterrows():
+            color = "#22c55e" if t["Statut"]=="Terminé" else "#ef4444"
+            prog = t["Progression_pct"]
+            st.markdown(f"""
+            <div style="background:white;border-radius:14px;padding:18px;border:1px solid rgba(180,150,80,0.2);
+                        border-left:4px solid {color};margin-bottom:12px">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+                    <div>
+                        <div style="font-weight:600;font-size:14px">{t['Produit']} — {t['Ruche']}</div>
+                        <div style="font-size:12px;color:#6B6040;margin-top:3px">{t['Pathologie']} · Débuté le {t['Date_debut']}</div>
+                    </div>
+                    <span class="badge {'badge-excellent' if t['Statut']=='Terminé' else 'badge-attention'}">{t['Statut']}</span>
+                </div>
+                <div style="font-size:12px;color:#6B6040;margin-bottom:6px">Progression — {t['Duree_j']} jours</div>
+                <div style="height:10px;background:#F5EDD8;border-radius:5px;overflow:hidden">
+                    <div style="height:100%;width:{prog}%;background:{'linear-gradient(90deg,#86EFAC,#22C55E)' if prog==100 else 'linear-gradient(90deg,#FB923C,#EF4444)'};border-radius:5px;transition:width 0.5s"></div>
+                </div>
+                <div style="font-size:11px;color:#6B6040;margin-top:5px">{prog}% complété</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+# ─────────────────────────────────────────────
+# PAGE: MIEL (inchangée, mais 'gelee_g' remplace 'Gelée_g')
+# ─────────────────────────────────────────────
+elif current_page == "miel":
+    st.markdown('<div class="page-title">🍯 Production de Miel</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Récoltes · Qualité · Traçabilité · Analyse sensorielle</div>', unsafe_allow_html=True)
+
+    df = st.session_state.data["ruches"]
+    rec = st.session_state.data["recoltes"]
+    miel_rec = rec[rec["Type"]=="Miel"].copy()
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1: st.markdown(metric_card("🍯", f"{df['Miel_kg'].sum():.1f} kg", "Total produit"), unsafe_allow_html=True)
+    with c2:
+        ca = (miel_rec["Quantite_kg"]*miel_rec["Prix_kg"]).sum()
+        st.markdown(metric_card("💰", f"{ca:,.0f} DA", "Chiffre d'affaires"), unsafe_allow_html=True)
+    with c3: st.markdown(metric_card("🏆", f"{df['Miel_kg'].max():.1f} kg", "Meilleure ruche"), unsafe_allow_html=True)
+    with c4: st.markdown(metric_card("📊", f"{df['Miel_kg'].mean():.1f} kg", "Moyenne/ruche"), unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    tab1, tab2, tab3 = st.tabs(["📊 Analyses", "➕ Enregistrer récolte", "📋 Historique"])
+
+    with tab1:
+        c_l, c_r = st.columns(2)
+        with c_l:
+            section_header("🏆 Production par ruche")
+            df_sorted = df.sort_values("Miel_kg", ascending=True)
+            fig = go.Figure(go.Bar(
+                x=df_sorted["Miel_kg"], y=df_sorted["Nom"], orientation='h',
+                marker=dict(color=df_sorted["Miel_kg"], colorscale=[[0,'#FFF8E6'],[1,'#8B5200']],
+                            line=dict(color='white',width=1)),
+                text=[f"{v:.1f} kg" for v in df_sorted["Miel_kg"]], textposition='inside',
+                textfont=dict(color='#4A3728', size=11)
+            ))
+            fig.update_layout(height=320, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(253,250,244,0.5)',
+                xaxis=dict(title="kg", tickfont=dict(color='#6B6040')),
+                yaxis=dict(tickfont=dict(color='#4A3728', size=12)),
+                margin=dict(l=10,r=10,t=10,b=10))
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
+
+        with c_r:
+            section_header("📊 Répartition par type de miel")
+            if len(miel_rec) > 0:
+                type_grp = miel_rec.groupby("Produit")["Quantite_kg"].sum().reset_index()
+                fig2 = go.Figure(go.Pie(
+                    labels=type_grp["Produit"], values=type_grp["Quantite_kg"],
+                    hole=0.45, marker=dict(colors=["#D4820A","#F5C842","#E8A020","#8B5200","#C4773A"],
+                                           line=dict(color='white',width=2)),
+                    textfont=dict(size=11),
+                    hovertemplate="%{label}: %{value:.1f} kg<extra></extra>"
+                ))
+                fig2.update_layout(height=320, paper_bgcolor='rgba(0,0,0,0)',
+                    legend=dict(font=dict(size=10,color='#4A3728'), bgcolor='rgba(0,0,0,0)'),
+                    margin=dict(l=0,r=0,t=10,b=10))
+                st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar":False})
+
+        section_header("💧 Contrôle qualité — Taux d'humidité")
+        st.markdown(alert("ℹ️", "Le taux d'humidité optimal est de 17–18%. Au-delà de 18.5%, risque de fermentation. En dessous de 16%, le miel peut cristalliser prématurément.", "alert-info"), unsafe_allow_html=True)
+        if len(miel_rec)>0:
+            fig3 = go.Figure()
+            fig3.add_trace(go.Scatter(x=miel_rec["Produit"], y=miel_rec["Humidite_pct"],
+                mode='markers+text', marker=dict(size=14, color=miel_rec["Humidite_pct"],
+                colorscale=[[0,'#22c55e'],[0.5,'#f59e0b'],[1,'#ef4444']], cmin=15, cmax=20,
+                line=dict(color='white',width=2)), text=[f"{h}%" for h in miel_rec["Humidite_pct"]],
+                textposition='top center', textfont=dict(size=11,color='#4A3728')))
+            fig3.add_hline(y=18.5, line_dash="dash", line_color="#ef4444", annotation_text="Seuil max (18.5%)")
+            fig3.add_hline(y=16.0, line_dash="dash", line_color="#f59e0b", annotation_text="Seuil min (16%)")
+            fig3.update_layout(height=260, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(253,250,244,0.5)',
+                yaxis=dict(range=[14,21], title="Humidité (%)", tickfont=dict(color='#6B6040')),
+                xaxis=dict(tickfont=dict(color='#4A3728')),
+                margin=dict(l=10,r=10,t=30,b=10))
+            st.plotly_chart(fig3, use_container_width=True, config={"displayModeBar":False})
+
+    with tab2:
+        st.markdown('<div class="section-header">Enregistrer une récolte de miel</div>', unsafe_allow_html=True)
+        c1, c2 = st.columns(2)
+        with c1:
+            r_date = st.date_input("Date de récolte", value=datetime.now())
+            r_ruche = st.selectbox("Ruche", [f"{r['ID']} — {r['Nom']}" for _,r in st.session_state.data["ruches"].iterrows()])
+            r_type = st.selectbox("Type de miel", ["Miel toutes fleurs","Miel de jujubier","Miel de romarin","Miel d'eucalyptus","Miel d'oranger","Miel de thym","Miel de jujubier sauvage"])
+            r_qte = st.number_input("Quantité récoltée (kg)", min_value=0.0, value=10.0, step=0.5)
+        with c2:
+            r_humidite = st.number_input("Humidité (%)", min_value=14.0, max_value=25.0, value=17.5, step=0.1)
+            r_couleur = st.selectbox("Couleur (Pfund)", ["Water White (<9)","Extra White (9–17)","White (18–34)","Extra Light Amber (35–50)","Light Amber (51–85)","Amber (86–114)","Dark Amber (>114)"])
+            r_prix = st.number_input("Prix de vente (DA/kg)", min_value=0, value=1500, step=100)
+            r_certif = st.selectbox("Certification", ["Standard","Bio (certifié)","AOC/IGP","À certifier"])
+        r_notes = st.text_area("Notes organoleptiques", placeholder="Arôme, texture, cristallisation, floraison dominante…")
+        if st.button("✓ Enregistrer la récolte", type="primary"):
+            new_r = {
+                "Date": str(r_date),
+                "Ruche": r_ruche.split("—")[0].strip(),
+                "Type": "Miel",
+                "Produit": r_type,
+                "Quantite_kg": r_qte,
+                "Humidite_pct": r_humidite,
+                "Prix_kg": r_prix
+            }
+            add_recolte(new_r)
+            st.session_state.data = load_dataframes()
+            st.success(f"✅ Récolte de {r_qte} kg enregistrée !")
+
+    with tab3:
+        st.dataframe(miel_rec.sort_values("Date", ascending=False), use_container_width=True, hide_index=True)
+
+# ─────────────────────────────────────────────
+# PAGE: POLLEN (inchangée)
+# ─────────────────────────────────────────────
+elif current_page == "pollen":
+    st.markdown('<div class="page-title">🌼 Production de Pollen</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Collecte · Séchage · Qualité pollinique · Traçabilité botanique</div>', unsafe_allow_html=True)
+
+    df = st.session_state.data["ruches"]
+    rec = st.session_state.data["recoltes"]
+    pol_rec = rec[rec["Type"]=="Pollen"].copy()
+
+    c1,c2,c3,c4 = st.columns(4)
+    with c1: st.markdown(metric_card("🌼", f"{df['Pollen_kg'].sum():.1f} kg", "Total collecté", "+22% vs 2023"), unsafe_allow_html=True)
+    with c2:
+        ca_pol = (pol_rec["Quantite_kg"]*pol_rec["Prix_kg"]).sum() if len(pol_rec)>0 else 0
+        st.markdown(metric_card("💰", f"{ca_pol:,.0f} DA", "CA Pollen", "+18%"), unsafe_allow_html=True)
+    with c3: st.markdown(metric_card("🏆", f"{df['Pollen_kg'].max():.1f} kg", "Meilleure collectrice"), unsafe_allow_html=True)
+    with c4: st.markdown(metric_card("🌸", "3", "Espèces dominantes"), unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    st.markdown(alert("🌼", "<strong>Le pollen frais doit être réfrigéré à 4°C ou congelé immédiatement après collecte.</strong> Séchage conseillé à ≤40°C pendant 24–48h pour préservation des protéines. Humidité cible après séchage : <8%.", "alert-info"), unsafe_allow_html=True)
+
+    tab1, tab2, tab3 = st.tabs(["📊 Analyses", "➕ Enregistrer récolte", "🔬 Palynologie"])
+
+    with tab1:
+        c_l, c_r = st.columns(2)
+        with c_l:
+            section_header("📊 Collecte par ruche (kg)")
+            df_pol = df.sort_values("Pollen_kg", ascending=True)
+            fig = go.Figure(go.Bar(
+                x=df_pol["Pollen_kg"], y=df_pol["Nom"], orientation='h',
+                marker_color='#F59E0B',
+                text=[f"{v:.1f} kg" for v in df_pol["Pollen_kg"]], textposition='inside',
+                textfont=dict(color='#4A3728',size=11)
+            ))
+            fig.update_layout(height=300, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(253,250,244,0.5)',
+                xaxis=dict(title="kg collecté", tickfont=dict(color='#6B6040')),
+                yaxis=dict(tickfont=dict(color='#4A3728',size=12)),
+                margin=dict(l=10,r=10,t=10,b=10))
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
+
+        with c_r:
+            section_header("🌸 Répartition des espèces pollinisées")
+            especes = ["Romarin","Jujubier","Oranger","Thym","Lavande","Chardon","Alfa","Tournesol"]
+            pcts = [28,22,18,12,9,5,4,2]
+            colors_esp = ["#F59E0B","#D4820A","#E8A020","#B45309","#92400E","#78350F","#FBBF24","#FCD34D"]
+            fig2 = go.Figure(go.Pie(
+                labels=especes, values=pcts, hole=0.45,
+                marker=dict(colors=colors_esp, line=dict(color='white',width=2)),
+                textfont=dict(size=10),
+                hovertemplate="%{label}: %{value}%<extra></extra>"
+            ))
+            fig2.update_layout(height=300, paper_bgcolor='rgba(0,0,0,0)',
+                legend=dict(font=dict(size=9,color='#4A3728'), bgcolor='rgba(0,0,0,0)', orientation='v'),
+                margin=dict(l=0,r=0,t=10,b=10))
+            st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar":False})
+
+        section_header("📅 Calendrier de collecte pollinique — Région Oranie")
+        mois = ["Jan","Fév","Mar","Avr","Mai","Juin","Juil","Août","Sep","Oct","Nov","Déc"]
+        pol_m = [0,12,45,80,90,60,35,20,10,5,0,0]
+        fig3 = go.Figure()
+        fig3.add_trace(go.Scatter(x=mois, y=pol_m, fill='tozeroy', name="Intensité collecte",
+            fillcolor='rgba(245,158,11,0.2)', line=dict(color='#F59E0B',width=2.5),
+            mode='lines+markers', marker=dict(size=7,color='#F59E0B')))
+        fig3.update_layout(height=240, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(253,250,244,0.5)',
+            yaxis=dict(title="Indice de disponibilité",tickfont=dict(color='#6B6040'),gridcolor='rgba(180,150,80,0.1)'),
+            xaxis=dict(tickfont=dict(color='#4A3728')),
+            margin=dict(l=10,r=10,t=10,b=10))
+        st.plotly_chart(fig3, use_container_width=True, config={"displayModeBar":False})
+
+    with tab2:
+        st.markdown('<div class="section-header">Enregistrer une collecte de pollen</div>', unsafe_allow_html=True)
+        c1, c2 = st.columns(2)
+        with c1:
+            p_date = st.date_input("Date de collecte", value=datetime.now(), key="p_date")
+            p_ruche = st.selectbox("Ruche collectrice", [f"{r['ID']} — {r['Nom']}" for _,r in st.session_state.data["ruches"].iterrows()], key="p_ruche")
+            p_qte = st.number_input("Quantité brute (kg)", min_value=0.0, value=1.5, step=0.1)
+            p_qte_sec = st.number_input("Quantité après séchage (kg)", min_value=0.0, value=1.2, step=0.1)
+        with c2:
+            p_humidite = st.number_input("Humidité après séchage (%)", min_value=4.0, max_value=15.0, value=7.5, step=0.1)
+            p_couleur = st.selectbox("Couleur dominante", ["Jaune doré","Orange","Gris-vert","Beige","Brun","Mixte"])
+            p_espece = st.text_input("Espèces florales dominantes", placeholder="Ex : Romarin, oranger")
+            p_prix = st.number_input("Prix de vente (DA/kg)", min_value=0, value=4500, step=100)
+        p_notes = st.text_area("Notes", placeholder="Conditions de collecte, qualité, odeur…", key="p_notes")
+        if st.button("✓ Enregistrer la collecte de pollen", type="primary"):
+            new_p = {
+                "Date": str(p_date),
+                "Ruche": p_ruche.split("—")[0].strip(),
+                "Type": "Pollen",
+                "Produit": f"Pollen — {p_espece if p_espece else 'Mixte'}",
+                "Quantite_kg": p_qte_sec,
+                "Humidite_pct": p_humidite,
+                "Prix_kg": p_prix
+            }
+            add_recolte(new_p)
+            st.session_state.data = load_dataframes()
+            st.success(f"✅ Collecte de {p_qte_sec} kg de pollen enregistrée !")
+
+    with tab3:
+        section_header("🔬 Analyse palynologique")
+        st.markdown(alert("🔬", "<strong>Palynologie apicole :</strong> Identification des grains de pollen sous microscope pour certifier l'origine botanique et géographique du miel. Norme ISO 22000 — Mélissopalynologie (Von der Ohe et al., 2004).", "alert-info"), unsafe_allow_html=True)
+
+        pal_data = {
+            "Espèce": ["Ziziphus lotus (Jujubier)","Rosmarinus off. (Romarin)","Citrus sinensis (Oranger)","Lavandula sp. (Lavande)","Thymus vulgaris (Thym)","Eucalyptus glob."],
+            "Famille": ["Rhamnaceae","Lamiaceae","Rutaceae","Lamiaceae","Lamiaceae","Myrtaceae"],
+            "Taille grain (µm)": ["25–35","15–25","25–35","30–40","18–28","20–30"],
+            "Forme": ["Tricolporé","Hexacolpé","Tricolporé","Tricolpé","Hexacolpé","Tricolporé"],
+            "Valeur mellifère": ["★★★★★","★★★★","★★★★★","★★★★","★★★★","★★★★"],
+            "Période": ["Mai–Juin","Fév–Avr","Avr–Mai","Juin–Jul","Avr–Juin","Nov–Jan"],
+        }
+        st.dataframe(pd.DataFrame(pal_data), use_container_width=True, hide_index=True)
+
+# ─────────────────────────────────────────────
+# PAGE: GELÉE ROYALE (inchangée, mais 'gelee_g')
+# ─────────────────────────────────────────────
+elif current_page == "gelee":
+    st.markdown('<div class="page-title">👑 Gelée Royale</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Production · Qualité · Conservation · Commercialisation</div>', unsafe_allow_html=True)
+
+    df = st.session_state.data["ruches"]
+    rec = st.session_state.data["recoltes"]
+    gr_rec = rec[rec["Type"]=="Gelée Royale"].copy()
+
+    c1,c2,c3,c4 = st.columns(4)
+    with c1: st.markdown(metric_card("👑", f"{df['gelee_g'].sum()} g", "Total produit (2024)", "+35% vs 2023"), unsafe_allow_html=True)
+    with c2:
+        ca_gr = (gr_rec["Quantite_kg"]*gr_rec["Prix_kg"]).sum() if len(gr_rec)>0 else 0
+        st.markdown(metric_card("💰", f"{ca_gr:,.0f} DA", "CA Gelée Royale"), unsafe_allow_html=True)
+    with c3: st.markdown(metric_card("🏆", f"{df['gelee_g'].max()} g", "Meilleure productrice"), unsafe_allow_html=True)
+    with c4: st.markdown(metric_card("🔬", "3", "Ruches productrices"), unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown(alert("👑", """<strong>Conservation de la gelée royale :</strong> 
+        La gelée royale fraîche doit être conservée à <strong>−18°C (congélation)</strong> ou à <strong>4°C pendant max 6 mois</strong>. 
+        Ne jamais conserver à température ambiante. Le pH optimal est de 3.5–4.5. 
+        Teneur en 10-HDA (acide 10-hydroxy-2-décénoïque) : indicateur de qualité — minimum 1.4% selon la norme européenne.""", "alert-royal"), unsafe_allow_html=True)
+
+    tab1, tab2, tab3 = st.tabs(["📊 Analyses", "➕ Enregistrer récolte", "🔬 Contrôle qualité"])
+
+    with tab1:
+        c_l, c_r = st.columns(2)
+        with c_l:
+            section_header("📊 Production par ruche (g)")
+            df_gr = df[df["gelee_g"]>0].sort_values("gelee_g", ascending=True)
+            fig = go.Figure(go.Bar(
+                x=df_gr["gelee_g"], y=df_gr["Nom"], orientation='h',
+                marker_color='#9B59B6',
+                text=[f"{v} g" for v in df_gr["gelee_g"]], textposition='inside',
+                textfont=dict(color='white',size=11)
+            ))
+            fig.update_layout(height=280, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(250,245,255,0.5)',
+                xaxis=dict(title="grammes", tickfont=dict(color='#6B6040')),
+                yaxis=dict(tickfont=dict(color='#4A3728',size=12)),
+                margin=dict(l=10,r=10,t=10,b=10))
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
+
+        with c_r:
+            section_header("📅 Calendrier de production GR")
+            mois = ["Jan","Fév","Mar","Avr","Mai","Juin","Juil","Août","Sep","Oct","Nov","Déc"]
+            gr_m = [0,0,15,45,80,95,75,50,20,5,0,0]
+            fig2 = go.Figure()
+            fig2.add_trace(go.Scatter(x=mois, y=gr_m, fill='tozeroy',
+                fillcolor='rgba(155,89,182,0.15)', line=dict(color='#9B59B6',width=2.5),
+                mode='lines+markers', marker=dict(size=7,color='#9B59B6')))
+            fig2.update_layout(height=280, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(250,245,255,0.5)',
+                yaxis=dict(title="Indice de production",tickfont=dict(color='#6B6040'),gridcolor='rgba(155,89,182,0.1)'),
+                xaxis=dict(tickfont=dict(color='#4A3728')),
+                margin=dict(l=10,r=10,t=10,b=10))
+            st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar":False})
+
+        section_header("🔬 Composition chimique typique")
+        comp_data = {
+            "Composant": ["Eau","Protéines totales","Glucides","Acide 10-HDA","Lipides","Minéraux","Acétylcholine"],
+            "Teneur typique": ["67–70%","11–14%","10–16%","1.4–2.4%","3–7%","0.8–1.5%","0.1–0.3 mg/g"],
+            "Rôle / intérêt": ["Activité biologique","Royalactine, gellines","Énergie","Marqueur qualité","Acides gras rares","Oligoéléments","Activité physiologique"],
+            "Norme qualité": ["<72%",">11%",">10%",">1.4%","—","—","—"],
+        }
+        st.dataframe(pd.DataFrame(comp_data), use_container_width=True, hide_index=True)
+
+    with tab2:
+        st.markdown('<div class="section-header">Enregistrer une récolte de gelée royale</div>', unsafe_allow_html=True)
+        c1, c2 = st.columns(2)
+        with c1:
+            gr_date = st.date_input("Date de récolte", value=datetime.now(), key="gr_date")
+            gr_ruche = st.selectbox("Ruche productrice", [f"{r['ID']} — {r['Nom']}" for _,r in st.session_state.data["ruches"].iterrows()], key="gr_ruche")
+            gr_qte_g = st.number_input("Quantité récoltée (g)", min_value=0.0, value=50.0, step=1.0)
+            gr_nb_cellules = st.number_input("Nombre de cellules royales", min_value=0, value=30, step=1)
+        with c2:
+            gr_hda = st.number_input("Taux 10-HDA mesuré (%)", min_value=0.0, max_value=5.0, value=1.8, step=0.1)
+            gr_ph = st.number_input("pH mesuré", min_value=3.0, max_value=6.0, value=3.8, step=0.1)
+            gr_conservation = st.selectbox("Méthode de conservation", ["Congélation (−18°C)","Réfrigération (4°C)","Lyophilisation","Mélange au miel"])
+            gr_prix = st.number_input("Prix de vente (DA/g)", min_value=0, value=120, step=10)
+        gr_notes = st.text_area("Observations", placeholder="Couleur, consistance, odeur, conditions de récolte…", key="gr_notes")
+        if st.button("✓ Enregistrer la récolte de gelée royale", type="primary"):
+            new_gr = {
+                "Date": str(gr_date),
+                "Ruche": gr_ruche.split("—")[0].strip(),
+                "Type": "Gelée Royale",
+                "Produit": "Gelée royale fraîche",
+                "Quantite_kg": gr_qte_g/1000,
+                "Humidite_pct": 68.0,
+                "Prix_kg": gr_prix*1000
+            }
+            add_recolte(new_gr)
+            st.session_state.data = load_dataframes()
+            hda_ok = gr_hda >= 1.4
+            ph_ok = 3.5 <= gr_ph <= 4.5
+            if hda_ok and ph_ok:
+                st.success(f"✅ Récolte de {gr_qte_g}g de gelée royale enregistrée ! Qualité conforme (10-HDA: {gr_hda}%, pH: {gr_ph})")
+            else:
+                st.warning(f"⚠️ Récolte enregistrée mais attention : {'10-HDA < 1.4% (sous norme)' if not hda_ok else ''} {'pH hors norme' if not ph_ok else ''}")
+
+    with tab3:
+        section_header("🔬 Contrôle qualité & normes")
+        st.markdown(alert("📋", """<strong>Normes de qualité de la gelée royale (selon Codex Alimentarius CAC/RCP 82-2013) :</strong><br>
+        • Humidité : 60–70% | • Protéines totales : ≥11% | • Acide 10-HDA : ≥1.4% (norme européenne : ≥1.6%)
+        | • pH : 3.5–4.5 | • Sucres réducteurs : ≤15% | • Absence de contamination par antibiotiques""", "alert-info"), unsafe_allow_html=True)
+
+        if len(gr_rec) > 0:
+            st.dataframe(gr_rec[["Date","Ruche","Produit","Quantite_kg","Humidite_pct"]].rename(
+                columns={"Quantite_kg":"Quantité (kg)","Humidite_pct":"Humidité (%)"}),
+                use_container_width=True, hide_index=True)
+
+# ─────────────────────────────────────────────
+# PAGE: MORPHOMÉTRIE (inchangée)
+# ─────────────────────────────────────────────
+elif current_page == "morphometrie":
+    st.markdown('<div class="page-title">🔬 Morphométrie des Abeilles</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Caractérisation morphologique selon Ruttner (1988) · Analyse discriminante · Classification raciale</div>', unsafe_allow_html=True)
+
+    st.markdown(alert("🔬", """<strong>Protocole morphométrique</strong> basé sur Ruttner (1988), Cornuet & Fresnaye (1989), 
+        Kandemir et al. (2011) et Baylac et al. (2008). 
+        36 caractères mesurables : aile antérieure, aile postérieure, corps, patte. 
+        Classification par analyse discriminante.""", "alert-info"), unsafe_allow_html=True)
+
+    tab1, tab2, tab3, tab4 = st.tabs(["📷 Saisie mesures", "📐 Référentiel", "📊 Analyses comparatives", "📋 Historique"])
+
+    with tab1:
+        st.markdown('<div class="section-header">Saisie des mesures morphométriques</div>', unsafe_allow_html=True)
+        c_form, c_result = st.columns([3, 2])
+
+        with c_form:
+            m_ruche = st.selectbox("Ruche analysée", [f"{r['ID']} — {r['Nom']}" for _,r in st.session_state.data["ruches"].iterrows()])
+            m_date = st.date_input("Date d'analyse", value=datetime.now(), key="m_date")
+            m_analyste = st.text_input("Analyste", value="Mohammed A.")
+            m_n_abeilles = st.number_input("Nombre d'abeilles mesurées", min_value=1, value=10, step=1)
+
+            st.markdown("**📏 Mesures de l'aile antérieure**")
+            col1, col2, col3 = st.columns(3)
+            with col1: m_L = st.number_input("Longueur L (mm)", min_value=7.0, max_value=12.0, value=9.18, step=0.01, format="%.2f")
+            with col2: m_B = st.number_input("Largeur B (mm)", min_value=2.5, max_value=4.5, value=3.21, step=0.01, format="%.2f")
+            with col3: m_Ri = st.number_input("Indice cubital Ri", min_value=1.0, max_value=5.0, value=2.45, step=0.01, format="%.2f")
+            col4, col5 = st.columns(2)
+            with col4: m_DI3 = st.number_input("Cellule 3 DI3 (mm)", min_value=1.0, max_value=2.5, value=1.72, step=0.01, format="%.2f")
+            with col5: m_OI = st.selectbox("Indice discoïdal (OI)", ["+ (positif)","- (négatif)"])
+
+            st.markdown("**📐 Angles alaires**")
+            col6, col7 = st.columns(2)
+            with col6: m_A4 = st.number_input("Angle A4 (°)", min_value=85.0, max_value=115.0, value=99.2, step=0.1, format="%.1f")
+            with col7: m_B4 = st.number_input("Angle B4 (°)", min_value=80.0, max_value=110.0, value=91.5, step=0.1, format="%.1f")
+
+            st.markdown("**🦵 Mesures de la patte postérieure**")
+            col8, col9, col10 = st.columns(3)
+            with col8: m_Ti = st.number_input("Tibia Ti-L (mm)", min_value=2.0, max_value=4.0, value=3.01, step=0.01, format="%.2f")
+            with col9: m_Ba = st.number_input("Basitarse Ba-L (mm)", min_value=1.2, max_value=2.5, value=1.88, step=0.01, format="%.2f")
+            with col10: m_BaW = st.number_input("Larg. basitarse (mm)", min_value=0.7, max_value=1.5, value=1.09, step=0.01, format="%.2f")
+
+            st.markdown("**🫀 Mesures abdominales**")
+            col11, col12 = st.columns(2)
+            with col11: m_T3 = st.number_input("Tergite 3 T3-L (mm)", min_value=3.5, max_value=5.5, value=4.78, step=0.01, format="%.2f")
+            with col12: m_Tom = st.number_input("Tomentum T4 (%)", min_value=0, max_value=100, value=37, step=1)
+
+            st.markdown("**👅 Langue & pigmentation**")
+            col13, col14 = st.columns(2)
+            with col13: m_Ac = st.number_input("Glossa / langue Ac (mm)", min_value=5.0, max_value=8.0, value=6.12, step=0.01, format="%.2f")
+            with col14: m_Pv = st.slider("Pigmentation scutellum (1–9)", 1, 9, 5)
+
+            m_notes = st.text_area("Observations", placeholder="Qualité de l'image, conditions, remarques…", key="m_notes")
+
+        with c_result:
+            st.markdown('<div class="section-header">🧬 Résultat de classification</div>', unsafe_allow_html=True)
+
+            def classify_bee(L, Ri, Ac, m_Pv, m_Tom, Ti):
+                scores = {
+                    "A. m. intermissa": 0,
+                    "A. m. sahariensis": 0,
+                    "A. m. ligustica": 0,
+                    "A. m. carnica": 0,
+                    "Hybride": 0,
+                }
+                if 8.9<=L<=9.6: scores["A. m. intermissa"]+=20
+                if 8.7<=L<=9.3: scores["A. m. sahariensis"]+=20
+                if 9.1<=L<=9.8: scores["A. m. ligustica"]+=15; scores["A. m. carnica"]+=15
+                if 2.0<=Ri<=2.8: scores["A. m. intermissa"]+=20
+                if 2.1<=Ri<=2.9: scores["A. m. sahariensis"]+=18
+                if 2.4<=Ri<=3.2: scores["A. m. ligustica"]+=20
+                if 2.6<=Ri<=3.5: scores["A. m. carnica"]+=20
+                if 5.9<=Ac<=6.3: scores["A. m. intermissa"]+=25
+                if 5.8<=Ac<=6.2: scores["A. m. sahariensis"]+=20
+                if 6.3<=Ac<=6.7: scores["A. m. ligustica"]+=25
+                if 6.4<=Ac<=6.8: scores["A. m. carnica"]+=25
+                if 4<=m_Pv<=7: scores["A. m. intermissa"]+=15
+                if 5<=m_Pv<=8: scores["A. m. sahariensis"]+=15
+                if 1<=m_Pv<=3: scores["A. m. ligustica"]+=15; scores["A. m. carnica"]+=15
+                if 30<=m_Tom<=45: scores["A. m. intermissa"]+=20
+                if 25<=m_Tom<=40: scores["A. m. sahariensis"]+=15
+                if 45<=m_Tom<=60: scores["A. m. ligustica"]+=20
+                if 35<=m_Tom<=50: scores["A. m. carnica"]+=15
+
+                total = sum(scores.values())
+                probs = {k: v/total*100 for k, v in scores.items()}
+                best = max(probs, key=probs.get)
+                if probs[best] < 40: best = "Hybride"
+                return best, probs
+
+            best_race, probs = classify_bee(m_L, m_Ri, m_Ac, m_Pv, m_Tom, m_Ti)
+            conf = probs[best_race]
+            race_badge_cls = RACE_BADGES.get(best_race, "badge-hybride")
+
+            st.markdown(f"""
+            <div class="race-result-box">
+                <div style="font-size:11px;color:#6B6040;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.08em">Taxon identifié</div>
+                <div class="race-name">{best_race}</div>
+                <div style="margin-top:8px"><span class="race-conf">Confiance : {conf:.0f}%</span></div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            for race, pct in sorted(probs.items(), key=lambda x: -x[1]):
+                st.markdown(f"""
+                <div style="margin-bottom:8px">
+                    <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+                        <span style="color:#4A3728;font-weight:500">{race}</span>
+                        <span style="font-family:'JetBrains Mono',monospace;color:#6B6040">{pct:.0f}%</span>
+                    </div>
+                    <div style="height:8px;background:#F5EDD8;border-radius:4px;overflow:hidden">
+                        <div style="height:100%;width:{pct}%;background:linear-gradient(90deg,#F5C842,#D4820A);border-radius:4px"></div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown(f"""
+            <div style="background:#F0FDF4;border-radius:12px;padding:14px;border:1px solid #BBF7D0;font-size:12px;line-height:1.7;color:#166534">
+                <strong>Interprétation :</strong> L'analyse de {m_n_abeilles} individus classe cette colonie comme 
+                <strong>{best_race}</strong> avec une confiance de <strong>{conf:.0f}%</strong>. 
+                Indice cubital Ri={m_Ri:.2f}, glossa={m_Ac:.2f}mm, tomentum={m_Tom}%.
+                Référence : <em>Ruttner (1988), Chahbar et al. (2013)</em>.
+            </div>
+            """, unsafe_allow_html=True)
+
+        if st.button("💾 Sauvegarder l'analyse morphométrique", type="primary"):
+            new_m = {
+                "Date": str(m_date),
+                "Ruche": m_ruche.split("—")[0].strip(),
+                "Taxon": best_race,
+                "Confiance_pct": round(conf,0),
+                "L_aile_mm": m_L,
+                "Ri": m_Ri,
+                "Glossa_mm": m_Ac,
+                "B_aile_mm": m_B,
+                "DI3_mm": m_DI3,
+                "A4_deg": m_A4,
+                "B4_deg": m_B4,
+                "Ti_L_mm": m_Ti,
+                "T3_L_mm": m_T3,
+                "Tomentum_pct": m_Tom,
+                "Pigment": m_Pv,
+                "OI": m_OI.split()[0],
+                "Analyste": m_analyste
+            }
+            add_morph_analyse(new_m)
+            st.session_state.data = load_dataframes()
+            st.success(f"✅ Analyse sauvegardée : {best_race} ({conf:.0f}% confiance)")
+
+    with tab2:
+        section_header("📐 Caractères morphométriques de référence (Ruttner 1988 / Kandemir 2011)")
+        ref_data = {
+            "Code": ["L","B","Ri","DI3","OI","T3-L","T4-L","T4-W","S4-L","Fe-L","Ti-L","Ba-L","Ba-W","Ac","Co1","Co2","Pv","Hb"],
+            "Caractère": ["Longueur aile ant.","Largeur aile ant.","Indice cubital (a/b)","Longueur cellule 3",
+                "Indice discoïdal","Largeur tergite 3","Largeur tergite 4","Tomentum tergite 4","Longueur sternite 4",
+                "Longueur fémur P3","Longueur tibia P3","Longueur basitarse","Largeur basitarse","Glossa / langue",
+                "Angle A4","Angle B4","Pigmentation scutellum","Pubescence abd. 4"],
+            "Unité": ["mm","mm","ratio","mm","ratio","mm","mm","%","mm","mm","mm","mm","mm","mm","°","°","score 1–9","mm"],
+            "A.m. intermissa": ["8.9–9.6","3.0–3.4","2.0–2.8","1.5–1.9","+/−","4.6–5.0","4.5–4.9","30–45","2.5–2.9","2.6–2.9","2.8–3.2","1.7–2.0","1.0–1.2","5.9–6.3","96–103","88–95","4–7","0.3–0.5"],
+            "A.m. ligustica": ["9.1–9.8","3.1–3.5","2.4–3.2","1.6–2.0","+","4.7–5.1","4.7–5.1","45–60","2.6–3.0","2.7–3.0","2.9–3.3","1.8–2.1","1.0–1.2","6.3–6.7","98–105","89–97","1–3","0.2–0.4"],
+            "A.m. carnica": ["9.1–9.8","3.1–3.4","2.6–3.5","1.6–2.0","+","4.7–5.2","4.7–5.1","35–50","2.6–3.0","2.7–3.0","3.0–3.4","1.8–2.1","1.0–1.2","6.4–6.8","95–102","86–93","1–3","0.2–0.4"],
+            "A.m. sahariensis": ["8.7–9.3","2.9–3.2","2.1–2.9","1.4–1.8","−","4.4–4.8","4.3–4.7","25–40","2.4–2.8","2.5–2.8","2.7–3.1","1.6–1.9","0.9–1.1","5.8–6.2","95–102","87–93","5–8","0.3–0.5"],
+        }
+        st.dataframe(pd.DataFrame(ref_data), use_container_width=True, hide_index=True)
+
+        section_header("📚 Références scientifiques")
+        refs = [
+            ("Ruttner F. (1988)", "Biogeography and Taxonomy of Honeybees. Springer, Berlin."),
+            ("Cornuet JM & Fresnaye J. (1989)", "Etude biométrique de colonies d'abeilles d'Espagne et du Portugal. Apidologie 20(2):93–101."),
+            ("Kandemir I. et al. (2011)", "Geometric morphometric analysis of honeybee wings. Apidologie 42:618–627."),
+            ("Baylac M. et al. (2008)", "Geometric morphometrics in entomology: Basics and applications. Zookeys."),
+            ("Chahbar N. et al. (2013)", "Population structure of North African honeybees. J. Apic. Res. 52(2):48–54."),
+            ("Franck P. et al. (2000)", "Microsatellite analysis of sperm pooling in the honeybee. Heredity 85:81–87."),
+        ]
+        for author, ref in refs:
+            st.markdown(f"▸ **{author}** — {ref}")
+
+    with tab3:
+        section_header("📊 Analyse comparative des mesures")
+        df_m = st.session_state.data["morph_analyses"]
+
+        if len(df_m) >= 2:
+            fig_radar_comp = go.Figure()
+            categories = ["L aile","Indice Ri","Glossa","Tomentum%","Ti-L","DI3"]
+            ref_intermissa = [9.25, 2.4, 6.1, 37.5, 3.0, 1.7]
+            ref_ligustica = [9.45, 2.8, 6.5, 52.5, 3.1, 1.8]
+            ref_carnica = [9.45, 3.05, 6.6, 42.5, 3.2, 1.8]
+
+            for _, row in df_m.iterrows():
+                vals_raw = [row["L_aile_mm"], row["Ri"], row["Glossa_mm"], row["Tomentum_pct"], row["Ti_L_mm"], row["DI3_mm"]]
+                maxv = [10.5, 4.0, 7.5, 70, 4.0, 2.5]
+                vals_norm = [v/m*100 for v,m in zip(vals_raw, maxv)]
+                fig_radar_comp.add_trace(go.Scatterpolar(
+                    r=vals_norm+[vals_norm[0]], theta=categories+[categories[0]],
+                    fill='toself', fillcolor=f'rgba(212,130,10,0.05)',
+                    line=dict(width=1.5), name=f"{row['Ruche']} ({row['Taxon']})"
+                ))
+
+            fig_radar_comp.update_layout(
+                polar=dict(
+                    bgcolor='rgba(253,250,244,0.5)',
+                    radialaxis=dict(visible=True, range=[0,100], tickfont=dict(size=8,color='#6B6040'),
+                                    gridcolor='rgba(180,150,80,0.2)'),
+                    angularaxis=dict(tickfont=dict(size=10,color='#4A3728'))
+                ),
+                showlegend=True, height=400,
+                legend=dict(font=dict(size=10), bgcolor='rgba(255,255,255,0.8)'),
+                paper_bgcolor='rgba(0,0,0,0)',
+                margin=dict(l=30,r=30,t=30,b=30)
+            )
+            st.plotly_chart(fig_radar_comp, use_container_width=True, config={"displayModeBar":False})
+
+            section_header("📊 Distribution des mesures clés")
+            fig_box = go.Figure()
+            measures = {"L aile (mm)": "L_aile_mm", "Ri cubital": "Ri", "Glossa (mm)": "Glossa_mm"}
+            colors_box = ["#D4820A","#F59E0B","#9B59B6"]
+            for (label, col), color in zip(measures.items(), colors_box):
+                fig_box.add_trace(go.Box(y=df_m[col], name=label,
+                    marker_color=color, boxmean=True, line_width=1.5))
+            fig_box.update_layout(height=300, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(253,250,244,0.5)',
+                yaxis=dict(tickfont=dict(color='#6B6040'), gridcolor='rgba(180,150,80,0.1)'),
+                xaxis=dict(tickfont=dict(color='#4A3728')),
+                margin=dict(l=10,r=10,t=10,b=10),
+                legend=dict(font=dict(size=11), bgcolor='rgba(0,0,0,0)'))
+            st.plotly_chart(fig_box, use_container_width=True, config={"displayModeBar":False})
+        else:
+            st.info("Enregistrez au moins 2 analyses morphométriques pour voir les comparaisons.")
+
+    with tab4:
+        st.dataframe(st.session_state.data["morph_analyses"].sort_values("Date",ascending=False),
+                     use_container_width=True, hide_index=True,
+                     column_config={
+                         "Confiance_pct": st.column_config.ProgressColumn(format="%d%%", min_value=0, max_value=100),
+                     })
+
+# ─────────────────────────────────────────────
+# PAGE: CARACTÉRISATION (inchangée, adaptée à 'gelee_g')
+# ─────────────────────────────────────────────
+elif current_page == "caracterisation":
+    st.markdown('<div class="page-title">📈 Caractérisation des Abeilles</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Profils de production · Langue & ailes · Résistance · Classification multiparamétrique</div>', unsafe_allow_html=True)
+
+    df = st.session_state.data["ruches"]
+
+    tab1, tab2, tab3, tab4 = st.tabs(["🎯 Profils production", "👅 Caractères morpho.", "🛡️ Résistance & comportement", "🗺️ Carte de caractérisation"])
+
+    with tab1:
+        section_header("🎯 Classification par profil de production dominant")
+
+        profils = df["Profil_prod"].value_counts().reset_index()
+        profils.columns = ["Profil","Nombre"]
+
+        c1, c2 = st.columns([1, 2])
+        with c1:
+            for _, row in profils.iterrows():
+                icon = PROFIL_ICONS.get(row["Profil"], "🐝")
+                color = PROFIL_COLORS.get(row["Profil"], "#D4820A")
+                st.markdown(f"""
+                <div style="background:white;border-radius:14px;padding:16px 20px;border:1px solid rgba(180,150,80,0.2);
+                            border-left:4px solid {color};margin-bottom:12px">
+                    <div style="font-size:24px;margin-bottom:6px">{icon}</div>
+                    <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:#4A3728">{row['Nombre']}</div>
+                    <div style="font-size:12px;font-weight:600;color:#6B6040;text-transform:uppercase;letter-spacing:0.06em">{row['Profil']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        with c2:
+            section_header("📊 Comparaison des profils")
+            fig = go.Figure()
+            metrics = {"Miel (kg)": "Miel_kg", "Pollen (kg×3)": "Pollen_kg", "Gelée R. (g/10)": "gelee_g"}
+            for profil in df["Profil_prod"].unique():
+                sub = df[df["Profil_prod"]==profil]
+                fig.add_trace(go.Scatter(
+                    x=list(metrics.keys()),
+                    y=[sub["Miel_kg"].mean(), sub["Pollen_kg"].mean()*3, sub["gelee_g"].mean()/10],
+                    name=f"{PROFIL_ICONS.get(profil,'')} {profil}",
+                    mode='lines+markers', fill='toself',
+                    line=dict(width=2), marker=dict(size=8)
+                ))
+            fig.update_layout(height=360, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(253,250,244,0.5)',
+                yaxis=dict(tickfont=dict(color='#6B6040'), gridcolor='rgba(180,150,80,0.1)'),
+                xaxis=dict(tickfont=dict(color='#4A3728',size=12)),
+                legend=dict(font=dict(size=11), bgcolor='rgba(255,255,255,0.8)'),
+                margin=dict(l=10,r=10,t=20,b=10))
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
+
+        section_header("🔬 Détail par ruche — Caractérisation complète")
+        for _, r in df.iterrows():
+            profil_color = PROFIL_COLORS.get(r["Profil_prod"], "#D4820A")
+            profil_icon = PROFIL_ICONS.get(r["Profil_prod"], "🐝")
+            with st.expander(f"{profil_icon} {r['Nom']} ({r['ID']}) — Profil : {r['Profil_prod']}"):
+                col_a, col_b, col_c = st.columns(3)
+                with col_a:
+                    st.markdown(f"""
+                    <div style="background:#FDFAF4;border-radius:12px;padding:14px;border:1px solid rgba(180,150,80,0.2)">
+                        <div style="font-size:11px;font-weight:600;color:#6B6040;text-transform:uppercase;margin-bottom:10px">🏭 Production</div>
+                        <div style="margin-bottom:6px"><span style="color:#D4820A;font-weight:600">🍯 {r['Miel_kg']} kg</span> de miel</div>
+                        <div style="margin-bottom:6px"><span style="color:#F59E0B;font-weight:600">🌼 {r['Pollen_kg']} kg</span> de pollen</div>
+                        <div><span style="color:#9B59B6;font-weight:600">👑 {r['gelee_g']} g</span> de gelée royale</div>
+                    </div>""", unsafe_allow_html=True)
+                with col_b:
+                    st.markdown(f"""
+                    <div style="background:#FDFAF4;border-radius:12px;padding:14px;border:1px solid rgba(180,150,80,0.2)">
+                        <div style="font-size:11px;font-weight:600;color:#6B6040;text-transform:uppercase;margin-bottom:10px">🔬 Morphologie</div>
+                        <div style="margin-bottom:5px"><strong>Glossa :</strong> {r['Glossa_mm']} mm</div>
+                        <div style="margin-bottom:5px"><strong>L. aile :</strong> {r['L_aile_mm']} mm</div>
+                        <div style="margin-bottom:5px"><strong>Ri cubital :</strong> {r['Ri']}</div>
+                        <div><strong>Tomentum :</strong> {r['Tomentum_pct']}%</div>
+                    </div>""", unsafe_allow_html=True)
+                with col_c:
+                    st.markdown(f"""
+                    <div style="background:#FDFAF4;border-radius:12px;padding:14px;border:1px solid rgba(180,150,80,0.2)">
+                        <div style="font-size:11px;font-weight:600;color:#6B6040;text-transform:uppercase;margin-bottom:10px">🧬 Génétique</div>
+                        <div style="margin-bottom:5px"><strong>Race :</strong> {r['Race']}</div>
+                        <div style="margin-bottom:5px"><strong>VSH :</strong> {r['VSH_pct']}%</div>
+                        <div style="margin-bottom:5px"><strong>Douceur :</strong> {r['Douceur']}%</div>
+                        <div><strong>Éco. hiv. :</strong> {r['Economie_hiv']}%</div>
+                    </div>""", unsafe_allow_html=True)
+                st.plotly_chart(production_radar(r), use_container_width=True, config={"displayModeBar":False})
+
+    with tab2:
+        section_header("👅 Caractères morphologiques — Langue & Ailes")
+
+        st.markdown(alert("🔬", """<strong>Importance de la longueur de la glossa (langue)</strong> : La longueur de la langue est le principal caractère 
+            discriminant entre les races méditerranéennes. <em>A.m. ligustica</em> (6.3–6.7mm) et <em>A.m. carnica</em> (6.4–6.8mm) ont des langues 
+            plus longues qu'<em>A.m. intermissa</em> (5.9–6.3mm) et <em>A.m. sahariensis</em> (5.8–6.2mm). 
+            La longueur de la langue est corrélée à l'accessibilité aux nectars de fleurs à corolles profondes.""", "alert-info"), unsafe_allow_html=True)
+
+        c_g, c_a = st.columns(2)
+
+        with c_g:
+            section_header("👅 Distribution de la longueur de la glossa")
+            fig_g = go.Figure()
+            for race in df["Race"].unique():
+                sub = df[df["Race"]==race]
+                color = {"A. m. intermissa":"#D4820A","A. m. sahariensis":"#9B59B6",
+                         "A. m. ligustica":"#3b82f6","A. m. carnica":"#22c55e","Hybride":"#6b7280"}.get(race,"#6b7280")
+                fig_g.add_trace(go.Box(y=sub["Glossa_mm"], name=race[:15], marker_color=color,
+                    boxmean=True, jitter=0.3, pointpos=-1.8,
+                    marker=dict(size=6, opacity=0.6)))
+
+            ref_ranges = {
+                "intermissa": (5.9, 6.3, "#D4820A"),
+                "ligustica": (6.3, 6.7, "#3b82f6"),
+                "carnica": (6.4, 6.8, "#22c55e"),
+                "sahariensis": (5.8, 6.2, "#9B59B6"),
+            }
+            for name, (lo, hi, col) in ref_ranges.items():
+                fig_g.add_hrect(y0=lo, y1=hi, fillcolor=col, opacity=0.04, line_width=0)
+
+            fig_g.update_layout(height=360, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(253,250,244,0.5)',
+                yaxis=dict(title="Glossa (mm)", tickfont=dict(color='#6B6040'), gridcolor='rgba(180,150,80,0.1)'),
+                xaxis=dict(tickfont=dict(color='#4A3728', size=10)),
+                margin=dict(l=10,r=10,t=20,b=10),
+                legend=dict(font=dict(size=9), bgcolor='rgba(0,0,0,0)'))
+            st.plotly_chart(fig_g, use_container_width=True, config={"displayModeBar":False})
+
+        with c_a:
+            section_header("✈️ Longueur aile antérieure & Indice cubital")
+            fig_wing = go.Figure()
+            for race in df["Race"].unique():
+                sub = df[df["Race"]==race]
+                color = {"A. m. intermissa":"#D4820A","A. m. sahariensis":"#9B59B6",
+                         "A. m. ligustica":"#3b82f6","A. m. carnica":"#22c55e","Hybride":"#6b7280"}.get(race,"#6b7280")
+                fig_wing.add_trace(go.Scatter(
+                    x=sub["L_aile_mm"], y=sub["Ri"], mode='markers+text',
+                    text=sub["ID"], textposition='top center', textfont=dict(size=9,color='#4A3728'),
+                    marker=dict(size=12, color=color, opacity=0.8, line=dict(color='white',width=1.5)),
+                    name=race[:15]
+                ))
+
+            fig_wing.add_vrect(x0=8.9, x1=9.6, fillcolor="#D4820A", opacity=0.04, line_width=0, annotation_text="intermissa L", annotation_position="top left")
+            fig_wing.update_layout(height=360, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(253,250,244,0.5)',
+                xaxis=dict(title="L aile ant. (mm)", tickfont=dict(color='#6B6040'), gridcolor='rgba(180,150,80,0.1)'),
+                yaxis=dict(title="Indice cubital Ri", tickfont=dict(color='#6B6040'), gridcolor='rgba(180,150,80,0.1)'),
+                legend=dict(font=dict(size=9), bgcolor='rgba(255,255,255,0.8)'),
+                margin=dict(l=10,r=10,t=20,b=10))
+            st.plotly_chart(fig_wing, use_container_width=True, config={"displayModeBar":False})
+
+        section_header("📊 Tomentum (bande dorée abdominale) — Caractère discriminant")
+        st.markdown("""<div style="font-size:13px;color:#6B6040;line-height:1.7;margin-bottom:16px">
+        Le tomentum (bande de poils clairs sur le 4ème tergite abdominal) est un indicateur de pigmentation. 
+        Un tomentum large (>45%) est typique des races italiennes et carnioliennes. Les races nord-africaines 
+        (<em>intermissa</em>, <em>sahariensis</em>) ont un tomentum plus étroit (25–45%).
+        </div>""", unsafe_allow_html=True)
+        fig_tom = go.Figure()
+        df_sorted = df.sort_values("Tomentum_pct")
+        colors_tom = ["#D4820A" if "intermissa" in r else "#9B59B6" if "sahariensis" in r else
+                      "#3b82f6" if "ligustica" in r else "#22c55e" if "carnica" in r else "#6b7280"
+                      for r in df_sorted["Race"]]
+        fig_tom.add_trace(go.Bar(x=df_sorted["Nom"], y=df_sorted["Tomentum_pct"],
+            marker_color=colors_tom, text=[f"{v}%" for v in df_sorted["Tomentum_pct"]],
+            textposition='outside', textfont=dict(size=11,color='#4A3728')))
+        fig_tom.add_hline(y=45, line_dash="dash", line_color="#3b82f6", annotation_text="Seuil ligustica/carnica (45%)")
+        fig_tom.add_hline(y=30, line_dash="dash", line_color="#D4820A", annotation_text="Seuil min. intermissa (30%)")
+        fig_tom.update_layout(height=280, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(253,250,244,0.5)',
+            yaxis=dict(title="Tomentum (%)", range=[0,75], tickfont=dict(color='#6B6040')),
+            xaxis=dict(tickfont=dict(color='#4A3728')),
+            margin=dict(l=10,r=10,t=40,b=10))
+        st.plotly_chart(fig_tom, use_container_width=True, config={"displayModeBar":False})
+
+    with tab3:
+        section_header("🛡️ Résistance au Varroa (VSH) & Comportement")
+
+        st.markdown(alert("🛡️", """<strong>VSH (Varroa Sensitive Hygiene)</strong> : Comportement héréditaire par lequel les abeilles détectent et 
+            éliminent les varroas reproductrices dans les cellules fermées. Un score VSH ≥70% indique une bonne résistance naturelle. 
+            Sélectionner pour ce caractère réduit significativement la dépendance aux traitements chimiques.""", "alert-info"), unsafe_allow_html=True)
+
+        c1, c2 = st.columns(2)
+        with c1:
+            section_header("📊 Score VSH par ruche")
+            df_vsh = df.sort_values("VSH_pct")
+            colors_vsh = ["#ef4444" if v < 60 else "#f59e0b" if v < 70 else "#22c55e" for v in df_vsh["VSH_pct"]]
+            fig_vsh = go.Figure(go.Bar(
+                x=df_vsh["VSH_pct"], y=df_vsh["Nom"], orientation='h',
+                marker_color=colors_vsh,
+                text=[f"{v}%" for v in df_vsh["VSH_pct"]], textposition='inside',
+                textfont=dict(color='white',size=11)
+            ))
+            fig_vsh.add_vline(x=70, line_dash="dash", line_color="#6b7280", annotation_text="Seuil cible (70%)")
+            fig_vsh.update_layout(height=320, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(253,250,244,0.5)',
+                xaxis=dict(range=[0,105], title="VSH (%)", tickfont=dict(color='#6B6040')),
+                yaxis=dict(tickfont=dict(color='#4A3728',size=12)),
+                margin=dict(l=10,r=10,t=20,b=10))
+            st.plotly_chart(fig_vsh, use_container_width=True, config={"displayModeBar":False})
+
+        with c2:
+            section_header("📊 Matrice des critères de sélection")
+            criteria = ["VSH%","Douceur","Éco.hiv.","Anti-essaimage\n(100−%)"]
+            fig_crit = go.Figure()
+            for _, r in df.iterrows():
+                vals = [r["VSH_pct"], r["Douceur"], r["Economie_hiv"], 100-r["Essaimage_pct"]]
+                fig_crit.add_trace(go.Scatter(
+                    x=criteria+[criteria[0]], y=vals+[vals[0]],
+                    mode='lines', name=r["Nom"],
+                    line=dict(width=1.5), fill='toself', fillcolor=f'rgba(212,130,10,0.04)'
+                ))
+            fig_crit.update_layout(height=320, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(253,250,244,0.5)',
+                yaxis=dict(range=[0,110],title="Score (%)",tickfont=dict(color='#6B6040'),gridcolor='rgba(180,150,80,0.1)'),
+                xaxis=dict(tickfont=dict(color='#4A3728')),
+                legend=dict(font=dict(size=9),bgcolor='rgba(255,255,255,0.8)'),
+                margin=dict(l=10,r=10,t=20,b=10))
+            st.plotly_chart(fig_crit, use_container_width=True, config={"displayModeBar":False})
+
+        section_header("🏆 Classement général des ruches")
+        df["Score_VSH"] = df["VSH_pct"]
+        df["Score_prod"] = (df["Miel_kg"]/20*40 + df["Pollen_kg"]/5*20 + df["gelee_g"]/200*20 +
+                            df["VSH_pct"]/100*10 + df["Douceur"]/100*10).clip(0,100).round(1)
+        df_rank = df[["Nom","Race","Profil_prod","Score_prod","VSH_pct","Douceur","Varroa_pct"]].sort_values("Score_prod",ascending=False)
+        df_rank.columns = ["Ruche","Race","Profil","Score global","VSH%","Douceur%","Varroa%"]
+        st.dataframe(df_rank, use_container_width=True, hide_index=True,
+            column_config={
+                "Score global": st.column_config.ProgressColumn(format="%.1f/100", min_value=0, max_value=100),
+                "VSH%": st.column_config.ProgressColumn(format="%d%%", min_value=0, max_value=100),
+                "Varroa%": st.column_config.NumberColumn(format="%.1f%%"),
+            })
+
+    with tab4:
+        section_header("🗺️ Carte de caractérisation multiparamétrique")
+        st.markdown("""<div style="font-size:13px;color:#6B6040;line-height:1.7;margin-bottom:16px">
+        Visualisation en espace ACP (Analyse en Composantes Principales) des ruches selon leurs caractères morphométriques et de production.
+        Les clusters représentent les groupes raciaux naturels.</div>""", unsafe_allow_html=True)
+
+        try:
+            from sklearn.decomposition import PCA
+            from sklearn.preprocessing import StandardScaler
+
+            features = ["L_aile_mm","Ri","Glossa_mm","Tomentum_pct","Pollen_kg","Miel_kg","gelee_g","VSH_pct"]
+            X = df[features].values
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(X)
+            pca = PCA(n_components=2, random_state=42)
+            X_pca = pca.fit_transform(X_scaled)
+
+            color_map = {"A. m. intermissa":"#D4820A","A. m. sahariensis":"#9B59B6",
+                         "A. m. ligustica":"#3b82f6","A. m. carnica":"#22c55e","Hybride":"#6b7280"}
+
+            fig_pca = go.Figure()
+            for race in df["Race"].unique():
+                mask = df["Race"]==race
+                fig_pca.add_trace(go.Scatter(
+                    x=X_pca[mask,0], y=X_pca[mask,1],
+                    mode='markers+text',
+                    text=df.loc[mask,"ID"].values,
+                    textposition='top center', textfont=dict(size=10,color='#4A3728'),
+                    marker=dict(size=18, color=color_map.get(race,"#6b7280"), opacity=0.8,
+                                symbol="hexagon", line=dict(color='white',width=2)),
+                    name=race
+                ))
+            fig_pca.update_layout(
+                height=440, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(253,250,244,0.5)',
+                xaxis=dict(title=f"CP1 ({pca.explained_variance_ratio_[0]*100:.1f}% variance)",
+                           tickfont=dict(color='#6B6040'), gridcolor='rgba(180,150,80,0.1)'),
+                yaxis=dict(title=f"CP2 ({pca.explained_variance_ratio_[1]*100:.1f}% variance)",
+                           tickfont=dict(color='#6B6040'), gridcolor='rgba(180,150,80,0.1)'),
+                legend=dict(font=dict(size=11), bgcolor='rgba(255,255,255,0.85)',
+                            bordercolor='rgba(180,150,80,0.3)', borderwidth=1),
+                margin=dict(l=10,r=10,t=30,b=10)
+            )
+            st.plotly_chart(fig_pca, use_container_width=True, config={"displayModeBar":False})
+
+            var_explained = pd.DataFrame({
+                "Composante": [f"CP{i+1}" for i in range(2)],
+                "Variance expliquée (%)": [f"{v*100:.1f}%" for v in pca.explained_variance_ratio_],
+                "Variance cumulée (%)": [f"{pca.explained_variance_ratio_[:i+1].sum()*100:.1f}%" for i in range(2)],
+            })
+            st.dataframe(var_explained, use_container_width=True, hide_index=True)
+
+        except ImportError:
+            st.info("scikit-learn requis pour l'analyse ACP. Installez-le avec : pip install scikit-learn")
+
+# ─────────────────────────────────────────────
+# PAGE: GÉNÉTIQUE (inchangée)
+# ─────────────────────────────────────────────
+elif current_page == "genetique":
+    st.markdown('<div class="page-title">🧬 Génétique & Sélection</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Lignées reines · Élevage · VSH · Marqueurs génétiques · Programme de sélection</div>', unsafe_allow_html=True)
+
+    df = st.session_state.data["ruches"]
+    tab1, tab2 = st.tabs(["👑 Registre des reines", "🧬 Programme de sélection"])
+
+    with tab1:
+        st.dataframe(df[["Reine_id","ID","Race","VSH_pct","Douceur","Economie_hiv","Essaimage_pct","Profil_prod"]].rename(
+            columns={"Reine_id":"ID Reine","ID":"Ruche","VSH_pct":"VSH%","Douceur":"Douceur%",
+                     "Economie_hiv":"Éco. hiv.%","Essaimage_pct":"Essaimage%","Profil_prod":"Profil"}),
+            use_container_width=True, hide_index=True,
+            column_config={
+                "VSH%": st.column_config.ProgressColumn(format="%d%%", min_value=0, max_value=100),
+                "Douceur%": st.column_config.ProgressColumn(format="%d%%", min_value=0, max_value=100),
+            })
+
+        section_header("📊 Critères de sélection — Vue d'ensemble")
+        criteria = ["VSH (Résistance Varroa)","Douceur","Productivité miel","Économie hivernale","Anti-essaimage"]
+        values = [df["VSH_pct"].mean(), df["Douceur"].mean(), df["Miel_kg"].mean()/20*100,
+                  df["Economie_hiv"].mean(), 100-df["Essaimage_pct"].mean()]
+        colors_c = ["#22c55e","#3b82f6","#D4820A","#9B59B6","#f59e0b"]
+
+        for c, v, col in zip(criteria, values, colors_c):
+            st.markdown(f"""
+            <div style="margin-bottom:12px">
+                <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px">
+                    <span style="color:#4A3728;font-weight:500">{c}</span>
+                    <span style="font-family:'JetBrains Mono',monospace;font-weight:600;color:#4A3728">{v:.0f}%</span>
+                </div>
+                <div style="height:10px;background:#F5EDD8;border-radius:5px;overflow:hidden">
+                    <div style="height:100%;width:{v}%;background:{col};border-radius:5px;transition:width 0.5s"></div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    with tab2:
+        section_header("🧬 Programme de sélection massale")
+        st.markdown(alert("🧬", """Le programme de sélection massale combine l'évaluation des colonies sur plusieurs générations 
+            avec des mesures morphométriques et des tests de comportement. L'objectif principal est l'amélioration de la 
+            résistance naturelle au Varroa (VSH) tout en maintenant la productivité et la douceur.""", "alert-info"), unsafe_allow_html=True)
+
+        st.markdown("**🏆 Ruches candidates à l'élevage de reines (Top 3)**")
+        top3 = df.nlargest(3, "VSH_pct")
+        for i, (_, r) in enumerate(top3.iterrows()):
+            medal = ["🥇","🥈","🥉"][i]
+            st.markdown(f"""
+            <div style="background:white;border-radius:14px;padding:16px;border:1px solid rgba(180,150,80,0.2);
+                        margin-bottom:10px;display:flex;align-items:center;gap:16px">
+                <div style="font-size:28px">{medal}</div>
+                <div style="flex:1">
+                    <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:700">{r['Nom']} ({r['ID']})</div>
+                    <div style="font-size:12px;color:#6B6040">{r['Race']} · VSH: {r['VSH_pct']}% · Douceur: {r['Douceur']}%</div>
+                </div>
+                <div style="text-align:center">
+                    <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:#22c55e">{r['VSH_pct']}%</div>
+                    <div style="font-size:10px;color:#6B6040;text-transform:uppercase;letter-spacing:0.07em">VSH</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+# ─────────────────────────────────────────────
+# PAGE: FLORE (inchangée)
+# ─────────────────────────────────────────────
+elif current_page == "flore":
+    st.markdown('<div class="page-title">🌸 Flore Mellifère</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Calendrier de floraison · Valeur apicole · Région de l\'Oranie — Algérie</div>', unsafe_allow_html=True)
+
+    flore_data = {
+        "Espèce": ["🌳 Jujubier (Ziziphus lotus)","🌿 Romarin (Rosmarinus off.)","🍊 Oranger (Citrus sinensis)",
+                   "🌼 Lavande (Lavandula sp.)","🌱 Thym (Thymus vulgaris)","🌳 Eucalyptus (E. globulus)",
+                   "🌻 Tournesol (H. annuus)","🌺 Chardon (Cynara sp.)","🌱 Alfa (Stipa tenacissima)",
+                   "🌼 Phacélie","🫒 Olivier (Olea europaea)","🌿 Sainfoin (Onobrychis sp.)"],
+        "Floraison": ["Mai–Juin","Fév–Avr","Avr–Mai","Juin–Jul","Avr–Juin","Nov–Jan","Juil–Août","Mai–Jul","Mar–Avr","Avr–Jun","Avr–Mai","Mai–Jun"],
+        "Nectarifère": ["★★★★★","★★★★","★★★★★","★★★★","★★★★","★★★★","★★★","★★★","★★","★★★★★","★★★","★★★★"],
+        "Pollinifère": ["★★★★","★★★","★★★★","★★★★","★★★","★★★★","★★★★★","★★★","★★★★","★★★★","★★★","★★★"],
+        "Valeur mellifère": ["Excellente","Très bonne","Excellente","Très bonne","Très bonne","Bonne","Bonne","Moyenne","Pollinifère","Excellente","Bonne","Bonne"],
+        "Habitat": ["Steppes, maquis","Garrigues","Vergers","Garrigues","Zones sèches","Forêts plantées","Cultures","Steppes","Steppes arides","Cultures","Vergers","Cultures"],
+        "Miellée principale": ["Oui","Non","Oui","Non","Non","Partielle","Non","Non","Non","Oui","Non","Non"],
+    }
+    df_flore = pd.DataFrame(flore_data)
+    st.dataframe(df_flore, use_container_width=True, hide_index=True)
+
+    section_header("📅 Calendrier de disponibilité mellifère")
+    mois = ["Jan","Fév","Mar","Avr","Mai","Juin","Juil","Août","Sep","Oct","Nov","Déc"]
+    disponibilite = [15,35,50,80,95,90,65,40,25,15,20,18]
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=mois, y=disponibilite, fill='tozeroy', name="Disponibilité nectar",
+        fillcolor='rgba(212,130,10,0.15)', line=dict(color='#D4820A',width=2.5),
+        mode='lines+markers', marker=dict(size=7,color='#D4820A')))
+    fig.update_layout(height=260, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(253,250,244,0.5)',
+        yaxis=dict(title="Indice de disponibilité",tickfont=dict(color='#6B6040'),gridcolor='rgba(180,150,80,0.1)'),
+        xaxis=dict(tickfont=dict(color='#4A3728')),
+        margin=dict(l=10,r=10,t=10,b=10))
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
+
+# ─────────────────────────────────────────────
+# PAGE: MÉTÉO (inchangée)
+# ─────────────────────────────────────────────
+elif current_page == "meteo":
+    st.markdown('<div class="page-title">🌤️ Météo & Miellée</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Conditions de butinage · Prévisions · Indice de miellée · Tlemcen — Algérie</div>', unsafe_allow_html=True)
+
+    c1, c2, c3 = st.columns(3)
+    meteos = [
+        ("Aujourd'hui","22°C","☀️ Ensoleillé","65%","12 km/h","8/10","linear-gradient(135deg,#2D4A1E,#3D6B2C)"),
+        ("Demain","19°C","⛅ Nuageux","72%","20 km/h","5/10","linear-gradient(135deg,#2D5A3D,#3D6B2C)"),
+        ("Après-demain","16°C","🌧️ Pluie","88%","35 km/h","1/10","linear-gradient(135deg,#3A2F1E,#5A4030)"),
+    ]
+    for col, (jour, temp, cond, hum, vent, miel, grad) in zip([c1,c2,c3], meteos):
+        with col:
+            st.markdown(f"""
+            <div style="background:{grad};border-radius:18px;padding:22px;color:white;margin-bottom:16px">
+                <div style="font-size:10px;opacity:0.6;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:8px">{jour}</div>
+                <div style="font-family:'Playfair Display',serif;font-size:44px;font-weight:700;line-height:1">{temp}</div>
+                <div style="font-size:14px;opacity:0.85;margin-top:4px">{cond}</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:16px;
+                            padding-top:14px;border-top:1px solid rgba(255,255,255,0.15)">
+                    <div style="text-align:center"><div style="font-size:16px;font-weight:600">{hum}</div>
+                        <div style="font-size:9px;opacity:0.55;text-transform:uppercase">Humidité</div></div>
+                    <div style="text-align:center"><div style="font-size:16px;font-weight:600">{vent}</div>
+                        <div style="font-size:9px;opacity:0.55;text-transform:uppercase">Vent</div></div>
+                    <div style="text-align:center"><div style="font-size:16px;font-weight:600">{miel}</div>
+                        <div style="font-size:9px;opacity:0.55;text-transform:uppercase">Miellée</div></div>
+                </div>
+            </div>""", unsafe_allow_html=True)
+
+    section_header("📊 Indice de butinage — 7 derniers jours")
+    jours = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"]
+    indice = [4,8,9,8,6,5,4]
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=jours, y=indice, fill='tozeroy',
+        fillcolor='rgba(212,130,10,0.15)', line=dict(color='#D4820A',width=2.5),
+        mode='lines+markers', marker=dict(size=10,color='#D4820A',line=dict(color='white',width=2)),
+        text=[f"{v}/10" for v in indice], textposition='top center', textfont=dict(size=11,color='#4A3728')))
+    fig.update_layout(height=240, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(253,250,244,0.5)',
+        yaxis=dict(range=[0,11],title="Indice (0–10)",tickfont=dict(color='#6B6040'),gridcolor='rgba(180,150,80,0.1)'),
+        xaxis=dict(tickfont=dict(color='#4A3728')),
+        margin=dict(l=10,r=10,t=10,b=10))
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
+
+# ─────────────────────────────────────────────
+# PAGE: RAPPORTS (inchangée)
+# ─────────────────────────────────────────────
+elif current_page == "rapports":
+    st.markdown('<div class="page-title">📋 Rapports & Exports</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Rapports réglementaires · Analyses statistiques · Export données</div>', unsafe_allow_html=True)
+
+    df = st.session_state.data["ruches"]
+    rec = st.session_state.data["recoltes"]
+
+    section_header("📊 Résumé de la saison 2024")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        miel_total = df["Miel_kg"].sum()
+        pol_total = df["Pollen_kg"].sum()
+        gr_total = df["gelee_g"].sum()
+        ca_total = rec.apply(lambda r: r["Quantite_kg"]*r["Prix_kg"], axis=1).sum()
+        st.markdown(f"""
+        <div class="morph-card">
+            <div style="font-weight:700;color:#D4820A;margin-bottom:12px">🍯 Production</div>
+            <div class="measure-row"><span>Miel total</span><span class="measure-val-ok">{miel_total:.0f} kg</span></div>
+            <div class="measure-row"><span>Pollen total</span><span class="measure-val-ok">{pol_total:.1f} kg</span></div>
+            <div class="measure-row"><span>Gelée royale</span><span class="measure-val-ok">{gr_total} g</span></div>
+            <div class="measure-row"><span>CA estimé</span><span class="measure-val-ok">{ca_total:,.0f} DA</span></div>
+        </div>""", unsafe_allow_html=True)
+    with c2:
+        varroa_moy = df["Varroa_pct"].mean()
+        vsh_moy = df["VSH_pct"].mean()
+        nb_insp = len(st.session_state.data["inspections"])
+        st.markdown(f"""
+        <div class="morph-card">
+            <div style="font-weight:700;color:#22c55e;margin-bottom:12px">🩺 Santé</div>
+            <div class="measure-row"><span>Varroa moyen</span><span class="{'measure-val-ok' if varroa_moy<2 else 'measure-val-warn'}">{varroa_moy:.1f}%</span></div>
+            <div class="measure-row"><span>VSH moyen</span><span class="{'measure-val-ok' if vsh_moy>70 else 'measure-val-warn'}">{vsh_moy:.0f}%</span></div>
+            <div class="measure-row"><span>Traitements</span><span class="measure-val-ok">{len(st.session_state.data['traitements'])}</span></div>
+            <div class="measure-row"><span>Inspections</span><span class="measure-val-ok">{nb_insp}</span></div>
+        </div>""", unsafe_allow_html=True)
+    with c3:
+        nb_morph = len(st.session_state.data["morph_analyses"])
+        race_dom = df["Race"].value_counts().idxmax() if len(df)>0 else "—"
+        conf_moy = st.session_state.data["morph_analyses"]["Confiance_pct"].mean() if len(st.session_state.data["morph_analyses"])>0 else 0
+        st.markdown(f"""
+        <div class="morph-card">
+            <div style="font-weight:700;color:#9B59B6;margin-bottom:12px">🔬 Science</div>
+            <div class="measure-row"><span>Analyses morpho.</span><span class="measure-val-ok">{nb_morph}</span></div>
+            <div class="measure-row"><span>Race dominante</span><span class="measure-val-ok" style="font-size:11px">{race_dom[:15]}</span></div>
+            <div class="measure-row"><span>Confiance moy.</span><span class="measure-val-ok">{conf_moy:.0f}%</span></div>
+            <div class="measure-row"><span>Profils actifs</span><span class="measure-val-ok">{df['Profil_prod'].nunique()}</span></div>
+        </div>""", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    section_header("⬇️ Exports disponibles")
+    c_ex1, c_ex2, c_ex3, c_ex4 = st.columns(4)
+
+    export_items = [
+        ("📊", "Données ruches", "CSV complet", st.session_state.data["ruches"]),
+        ("🔬", "Morphométrie", "CSV analyses", st.session_state.data["morph_analyses"]),
+        ("🍯", "Récoltes", "CSV production", st.session_state.data["recoltes"]),
+        ("💊", "Traitements", "CSV vétérinaire", st.session_state.data["traitements"]),
+    ]
+    for col, (icon, title, subtitle, data) in zip([c_ex1,c_ex2,c_ex3,c_ex4], export_items):
+        with col:
+            st.markdown(f"""
+            <div style="background:white;border-radius:14px;padding:20px;text-align:center;
+                        border:1px solid rgba(180,150,80,0.2);margin-bottom:12px">
+                <div style="font-size:32px;margin-bottom:10px">{icon}</div>
+                <div style="font-weight:600;font-size:14px;margin-bottom:4px">{title}</div>
+                <div style="font-size:11px;color:#6B6040">{subtitle}</div>
+            </div>""", unsafe_allow_html=True)
+            csv = data.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label=f"⬇ Télécharger",
+                data=csv,
+                file_name=f"apitrack_{title.lower().replace(' ','_')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+
+# ─────────────────────────────────────────────
+# PAGE: ALERTES (inchangée)
+# ─────────────────────────────────────────────
+elif current_page == "alertes":
+    st.markdown('<div class="page-title">🚨 Alertes & Notifications</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Surveillance en temps réel · Priorisation intelligente · Actions correctives</div>', unsafe_allow_html=True)
+
+    df = st.session_state.data["ruches"]
+
+    alertes_auto = []
+    for _, r in df.iterrows():
+        if r["Varroa_pct"] > 3:
+            alertes_auto.append(("🔴","danger",f"CRITIQUE — {r['Nom']} ({r['ID']}) : Varroa {r['Varroa_pct']}% — Traitement urgent requis."))
+        elif r["Varroa_pct"] > 2:
+            alertes_auto.append(("🟠","warning",f"ATTENTION — {r['Nom']} ({r['ID']}) : Varroa {r['Varroa_pct']}% — Surveiller."))
+        if r["Statut"] == "Critique":
+            alertes_auto.append(("🔴","danger",f"CRITIQUE — {r['Nom']} ({r['ID']}) : Statut général critique. Inspection urgente."))
+        if r["VSH_pct"] < 60:
+            alertes_auto.append(("🟡","warning",f"SÉLECTION — {r['Nom']} ({r['ID']}) : VSH {r['VSH_pct']}% — Sous le seuil de 60%. Renouveler la reine."))
+        if r["gelee_g"] > 150 and r["Profil_prod"] == "Gelée Royale":
+            alertes_auto.append(("👑","royal",f"RÉCOLTE — {r['Nom']} ({r['ID']}) : Excellente productrice de gelée royale ({r['gelee_g']}g). Planifier la prochaine récolte."))
+
+    alertes_auto.append(("📦","info","STOCK — Cire gaufrée : Niveau critique (1.2 kg restant, seuil : 5 kg). Commander rapidement."))
+    alertes_auto.append(("📅","info","RAPPEL : Traitement anti-varroa hivernal recommandé. Prévoir entre novembre et décembre."))
+    alertes_auto.append(("✅","success","Bonne nouvelle : 6 colonies montrent un VSH > 70%. Programme de sélection en bonne voie !"))
+
+    cls_map = {"danger":"alert-danger","warning":"alert-warning","success":"alert-success","info":"alert-info","royal":"alert-royal"}
+
+    for icon, level, txt in alertes_auto:
+        st.markdown(alert(icon, txt, cls_map.get(level,"alert-info")), unsafe_allow_html=True)
+
+# ─────────────────────────────────────────────
 # FOOTER
-# =====================================================
+# ─────────────────────────────────────────────
 st.markdown("""
-<div style="text-align:center;padding:28px 0 12px;font-size:12px;color:#9B8860;
-            border-top:1px solid rgba(180,150,80,0.12);margin-top:36px">
-  <strong style="font-family:'Playfair Display',serif;font-size:13.5px;color:#3E2A18">ApiTrack Pro v3.0</strong>
-  · Plateforme Apicole Professionnelle · IA Morphométrie Gratuite & Permanente<br>
-  Ruttner (1988) · Kandemir (2011) · Chahbar et al. (2013) · Région de l'Oranie, Algérie<br>
-  <span style="font-size:11px">🤖 IA : Google Gemini (gratuit) · Groq LLaMA Vision (gratuit) · Ollama local (gratuit)</span><br><br>
-  🐝 Développé pour l'apiculture scientifique et professionnelle
+<div style="text-align:center;padding:32px 0 16px;font-size:12px;color:#9B8860;border-top:1px solid rgba(180,150,80,0.15);margin-top:40px">
+    <strong style="font-family:'Playfair Display',serif;font-size:14px;color:#4A3728">ApiTrack Pro</strong> · 
+    Plateforme Apicole Professionnelle · Version 2.0<br>
+    Morphométrie selon <em>Ruttner (1988)</em> · Données de référence <em>Chahbar et al. (2013)</em> · 
+    Région de l'Oranie, Algérie<br><br>
+    🐝 Développé pour l'apiculture scientifique et professionnelle
 </div>
 """, unsafe_allow_html=True)
