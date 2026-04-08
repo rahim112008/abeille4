@@ -395,7 +395,7 @@ def init_db():
     )""")
 
     # Admin par défaut
-    c.execute("INSERT OR IGNORE INTO settings VALUES ('apiculteur','RAHIM S.')")
+    c.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", ("apiculteur", "RAHIM S."))
     c.execute("INSERT OR IGNORE INTO settings VALUES ('rucher','Rucher de l\\'Oranie')")
     c.execute("INSERT OR IGNORE INTO settings VALUES ('region','Tlemcen, Algérie')")
 
